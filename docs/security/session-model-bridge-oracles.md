@@ -1911,10 +1911,12 @@ only by `PortDoor::halt` (`mother/src/adapter/session_port.rs:127-130`), called 
 and `GovernedPort::fence` (:895), reached only through the coordinator's closure (coordinator.rs:1119),
 invoked only on a failed journal append (coordinator.rs:754-763): internal faults, never an Owner act
 (Step 0: 0 entries in 120 runs). Guard `door_caller_findings` (route_seams_guard.rs; rule test
-`sb3e_u20b_door_callers`; U20a's scoping and walk `production_sites`): every production `halt` call
-or path and `.fence` equals `DOOR_CALLERS`, the pinned two inside their arms (`DOOR_ARMS`). It fails on
-(a) another `halt` caller, (b) another `.fence` or one outside the append-failure arm, (c) a `halt` in
-`mother/host/src`; then the 13 rows reopen as set B.
+`sb3e_u20b_door_callers`; U20a's scoping and walk `production_sites`): every production `halt` and
+`fence` identifier but its `fn` (R214.3 D1, R231 S1) equals `DOOR_CALLERS`, the pinned sites inside
+their arms and forms (`DOOR_ARMS`, `DOOR_FORMS`: the poison arm, `(self.fence)()` in the append-failure
+arm, the closure `fence: Box::new(move || fencer.fence())`). It fails on (a) another `halt`, (b) another
+`fence` or one outside its arm or form, (c) another `halt` in `mother/host/src`; then the 12 rows above
+(and x:258, under read_failure) reopen as set B.
 
 **Ledger by key.** read_failure x:177, 258 (GB4b). W1 (U22): mission_stop x:180, 261; stop_all
 x:181, 262; grant_revocation x:186, 267. W3 (29): original_cell_unscheduled x:178, 259; door_fence

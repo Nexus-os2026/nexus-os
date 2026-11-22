@@ -1389,18 +1389,25 @@ fn close_caller_findings(sources: &[(String, String)]) -> Vec<String> {
     }
     found
 }
-/// U20b (SB3E-R226 F-B; docs 14.22): door_halt's production callers, `file|fn|callee`,
-/// with U20a's scoping. `halt` (a call or path, not a field, module or `fn`): `PortDoor::halt`
+/// U20b (SB3E-R226 F-B, R231 S1; docs 14.22): every production `halt` and `fence` identifier
+/// but its own `fn` (R214.3 D1), `file|fn|callee`, with U20a's scoping. `PortDoor::halt`
 /// (adapter/session_port.rs:127-130), from `locked`'s poison arm (adapter/mod.rs:376) and
-/// `fence` (:895). `.fence`: the port's (session_port.rs:447) through the coordinator's closure
-/// (coordinator.rs:1119), invoked at :763 only; and three `#[path]` test modules
-/// (coordinator/lite.rs:67, :72, :82) that `CALLER_EXCLUDED` does not name.
+/// `fence` (:895); hands.rs `close_report`'s four `o.halt.*` fields (:804). The port's `fence`
+/// (session_port.rs:447) through the coordinator's closure field (coordinator.rs:570, 1119),
+/// invoked at :763 only; and three `#[path]` test modules (coordinator/lite.rs:67, :72, :82)
+/// that `CALLER_EXCLUDED` does not name.
 const DOOR_CALLERS: &str = "\
 src/adapter/session_port.rs|halt|halt
 src/adapter/session_port.rs|halt|halt
 src/adapter/mod.rs|locked|halt
 src/adapter/mod.rs|fence|halt
+host/src/hands.rs|close_report|halt
+host/src/hands.rs|close_report|halt
+host/src/hands.rs|close_report|halt
+host/src/hands.rs|close_report|halt
 src/adapter/session_port.rs|fence|fence
+src/coordinator.rs|-|fence
+src/coordinator.rs|open|fence
 src/coordinator.rs|open|fence
 src/coordinator.rs|write_record|fence
 src/adapter/lite_review4.rs|terminal_pair|fence
@@ -1408,24 +1415,26 @@ src/adapter/lite_review5.rs|run_case|fence
 src/adapter/session_terminal_oracles_tests.rs|child|fence
 ";
 /// Each pinned site's arm (`file|fn|callee|its opening tokens`): the poison arm
-/// (adapter/mod.rs:372) and the append-failure arm (coordinator.rs:754), whose `fence`
-/// must be `(self.fence)()`.
+/// (adapter/mod.rs:372) and the append-failure arm (coordinator.rs:754).
 const DOOR_ARMS: [&str; 2] = [
     "src/adapter/mod.rs|locked|halt|Err ( poisoned ) = > {",
     "src/coordinator.rs|write_record|fence|if let Err ( e ) = self . store . append ( & line ) {",
 ];
-/// Each non-test `halt` call or path and `.fence` in `t`, as `(enclosing fn, index)`.
+/// Each pinned site's form (`file|fn|callee|tokens holding it`): `(self.fence)()` (:763) and
+/// the closure `fence: Box::new(move || fencer.fence())` (:1119, R231 C1).
+const DOOR_FORMS: [&str; 2] = [
+    "src/coordinator.rs|write_record|fence|( self . fence ) (",
+    "src/coordinator.rs|open|fence|fence : Box : : new ( move | | fencer . fence ( ) )",
+];
+/// Each non-test `halt` or `fence` in `t` but its `fn`, as `(enclosing fn, index)`.
 fn door_calls<'a>(t: &[&'a str]) -> Vec<(&'a str, usize)> {
-    let named = |i: usize| {
-        let (dot, next) = (i > 0 && t[i - 1] == ".", t.get(i + 1).copied());
-        let path = i > 1 && t[i - 2..i] == [":", ":"] && next != Some(":");
-        match t[i] {
-            "halt" => dot && next == Some("(") || path,
-            "fence" => dot,
-            _ => false,
-        }
-    };
+    let named = |i: usize| ["halt", "fence"].contains(&t[i]) && i > 0 && t[i - 1] != "fn";
     production_sites(t, named)
+}
+/// Whether `t[i]` lies inside an occurrence of the tokens `form`.
+fn in_form(t: &[&str], i: usize, form: &str) -> bool {
+    let f: Vec<&str> = form.split(' ').collect();
+    (i.saturating_sub(f.len() - 1)..=i).any(|k| t[k..].starts_with(&f))
 }
 /// Whether `t[i]` lies in the block `head` opens, the last such before it.
 fn in_arm(t: &[&str], i: usize, head: &str) -> bool {
@@ -1433,8 +1442,8 @@ fn in_arm(t: &[&str], i: usize, head: &str) -> bool {
     let at = (0..i).rev().find(|&k| t[k..].starts_with(&head));
     at.is_some_and(|k| i < close_of(t, k + head.len() - 1))
 }
-/// U20b: (a) another production `halt` caller, (b) another `.fence`, or the coordinator's
-/// outside its arm, (c) any `halt` in `host/src/`.
+/// U20b: (a) another production `halt`, (b) another `fence`, or a pinned one outside its arm
+/// or form, (c) another `halt` in `host/src/`.
 fn door_caller_findings(sources: &[(String, String)]) -> Vec<String> {
     let lexed: Vec<(&str, Vec<&str>)> = sources
         .iter()
@@ -1455,13 +1464,20 @@ fn door_caller_findings(sources: &[(String, String)]) -> Vec<String> {
                 Some(at) => drop(listed.remove(at)),
                 None => found.push(format!("door callers {which}: unlisted {row}")),
             }
-            let arm = DOOR_ARMS
+            let pinned = |a: &&str| a.strip_prefix(&format!("{row}|")).map(str::to_owned);
+            if DOOR_ARMS
                 .iter()
-                .find_map(|a| a.strip_prefix(&format!("{row}|")));
-            let closure = ["(", "self", ".", "fence", ")", "("];
-            let form = t[i] != "fence" || i > 2 && t.get(i - 3..i + 3) == Some(&closure[..]);
-            if arm.is_some_and(|head| !in_arm(t, i, head) || !form) {
+                .find_map(pinned)
+                .is_some_and(|h| !in_arm(t, i, &h))
+            {
                 found.push(format!("door callers {which}: {row} outside its arm"));
+            }
+            if DOOR_FORMS
+                .iter()
+                .find_map(pinned)
+                .is_some_and(|f| !in_form(t, i, &f))
+            {
+                found.push(format!("door callers {which}: {row} outside its form"));
             }
         }
     }
@@ -4557,8 +4573,8 @@ fn sb3e_u20a_close_callers() {
 }
 
 /// U20b (SB3E-R226 F-B): each clause of `door_caller_findings` refuses its own planted
-/// text, and the real tree passes; a comment, a string, a `#[cfg(test)]` item or module,
-/// a test file, a module path and a field are no production callers.
+/// text, and the real tree passes; a comment, a string, a `#[cfg(test)]` item or module and
+/// a test file are no production callers.
 #[test]
 fn sb3e_u20b_door_callers() {
     let sources = walked().0;
@@ -4584,8 +4600,31 @@ fn sb3e_u20b_door_callers() {
     let path = at(h, run, "Door::halt(&d, r);");
     let fenced = at(h, run, "port.fence();");
     let adapter = at(am, withdraw, &format!("{halt};"));
-    let outside = at("src/coordinator.rs", append, "(self.fence)();");
+    let co = "src/coordinator.rs";
+    let outside = at(co, append, "(self.fence)();");
+    // R231 S1: a path call, a method value, a destructured field and a raw identifier.
+    let ufcs = at(h, run, "GovernedPort::fence(&port);");
+    let value = at(h, run, "let _ = ports.map(GovernedPort::fence);");
+    let bound = at(
+        co,
+        append,
+        "let Inner { fence, .. } = &mut *inner;\n        fence();",
+    );
+    let raw = at(h, run, "door.r#halt(r);");
+    // R231 C1: an eager `fence` in `open` beside its closure.
+    let fencer = "        let fencer = port.clone();\n";
+    let eager = planted(
+        &sources,
+        co,
+        fencer,
+        &format!("{fencer}        let _ = fencer.fence();\n"),
+    );
     for (planted, expected) in [
+        (ufcs, "(b): unlisted host/src/hands.rs|run|fence"),
+        (value, "(b): unlisted host/src/hands.rs|run|fence"),
+        (bound, "(b): unlisted src/coordinator.rs|write_record|fence"),
+        (raw, "(c): unlisted host/src/hands.rs|run|halt"),
+        (eager, "(b): src/coordinator.rs|open|fence outside its form"),
         (hands, "(c): unlisted host/src/hands.rs|run|halt"),
         (path, "(c): unlisted host/src/hands.rs|run|halt"),
         (fenced, "(b): unlisted host/src/hands.rs|run|fence"),
@@ -4615,11 +4654,6 @@ fn sb3e_u20b_door_callers() {
             at(h, run, &format!("#[cfg(test)]\n{call}")),
         ),
         ("an integration test", test_file),
-        (
-            "a module path",
-            at(h, run, "use crate::authority::halt::RecordBatch;"),
-        ),
-        ("a field", at(h, run, "let _ = o.halt.pending;")),
     ] {
         let found = door_caller_findings(&planted);
         if found != real {
