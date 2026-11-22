@@ -1075,6 +1075,7 @@ fn inventory_findings(sources: &[(String, String)]) -> Vec<String> {
     more.extend(reader_timeout_findings(text(sources, READER)));
     more.extend(order_findings(text(sources, "host/src/hands.rs")));
     more.extend(close_caller_findings(sources));
+    more.extend(door_caller_findings(sources));
     for finding in more {
         check(false, finding);
     }
@@ -1241,10 +1242,21 @@ fn test_mods(lexed: &[(&str, Vec<&str>)]) -> Vec<String> {
     found
 }
 /// Each non-test occurrence in `t` of a guarded callee as `(enclosing fn,
-/// callee)`. A pending
+/// callee)`. R214.3 D1: every occurrence counts (a call, a method value, a
+/// `use` alias), but for the callee's own `fn` definition.
+fn close_calls<'a>(file: &str, t: &[&'a str]) -> Vec<(&'a str, &'a str)> {
+    let guarded = |i: usize| {
+        let called = i > 0 && t[i - 1] != "fn";
+        called && GUARDED.iter().any(|g| g.0 == t[i] && file.starts_with(g.2))
+    };
+    let found = production_sites(t, guarded).into_iter();
+    found.map(|(within, i)| (within, t[i])).collect()
+}
+/// Each non-test token of `t` that `pick` takes, as `(enclosing fn, index)`
+/// (U20b: `close_calls`' walk, shared by `door_calls`). A pending
 /// `#[cfg(test)]` ends at its item's `;`, block or `}`, and (S4) at a `,`,
 /// `)` or `]` of its own level.
-fn close_calls<'a>(file: &str, t: &[&'a str]) -> Vec<(&'a str, &'a str)> {
+fn production_sites<'a>(t: &[&'a str], pick: impl Fn(usize) -> bool) -> Vec<(&'a str, usize)> {
     let (mut found, mut stack) = (Vec::new(), Vec::<(Option<&str>, bool)>::new());
     let (mut name, mut test, mut depth, mut skip) = (None, false, 0usize, 0);
     for i in 0..t.len() {
@@ -1276,12 +1288,8 @@ fn close_calls<'a>(file: &str, t: &[&'a str]) -> Vec<(&'a str, &'a str)> {
             ")" | "]" if test => depth -= 1,
             _ => {}
         }
-        // R214.3 D1: every occurrence counts (a call, a method value, a `use`
-        // alias), but for the callee's own `fn` definition.
-        let called = i > 0 && t[i - 1] != "fn";
-        let guarded = GUARDED.iter().any(|g| g.0 == t[i] && file.starts_with(g.2));
-        if guarded && called && !test && !stack.iter().any(|s| s.1) {
-            found.push((stack.iter().rev().find_map(|s| s.0).unwrap_or("-"), t[i]));
+        if pick(i) && !test && !stack.iter().any(|s| s.1) {
+            found.push((stack.iter().rev().find_map(|s| s.0).unwrap_or("-"), i));
         }
     }
     found
@@ -1375,6 +1383,89 @@ fn close_caller_findings(sources: &[(String, String)]) -> Vec<String> {
                 found.push(format!("close callers (e): {file} uses {w}"));
             }
         }
+    }
+    found
+}
+/// U20b (SB3E-R226 F-B; docs 14.22): door_halt's production callers, `file|fn|callee`,
+/// with U20a's scoping. `halt` (a call or path, not a field, module or `fn`): `PortDoor::halt`
+/// (adapter/session_port.rs:127-130), from `locked`'s poison arm (adapter/mod.rs:376) and
+/// `fence` (:895). `.fence`: the port's (session_port.rs:447) through the coordinator's closure
+/// (coordinator.rs:1119), invoked at :763 only; and three `#[path]` test modules
+/// (coordinator/lite.rs:67, :72, :82) that `CALLER_EXCLUDED` does not name.
+const DOOR_CALLERS: &str = "\
+src/adapter/session_port.rs|halt|halt
+src/adapter/session_port.rs|halt|halt
+src/adapter/mod.rs|locked|halt
+src/adapter/mod.rs|fence|halt
+src/adapter/session_port.rs|fence|fence
+src/coordinator.rs|open|fence
+src/coordinator.rs|write_record|fence
+src/adapter/lite_review4.rs|terminal_pair|fence
+src/adapter/lite_review5.rs|run_case|fence
+src/adapter/session_terminal_oracles_tests.rs|child|fence
+";
+/// Each pinned site's arm (`file|fn|callee|its opening tokens`): the poison arm
+/// (adapter/mod.rs:372) and the append-failure arm (coordinator.rs:754), whose `fence`
+/// must be `(self.fence)()`.
+const DOOR_ARMS: [&str; 2] = [
+    "src/adapter/mod.rs|locked|halt|Err ( poisoned ) = > {",
+    "src/coordinator.rs|write_record|fence|if let Err ( e ) = self . store . append ( & line ) {",
+];
+/// Each non-test `halt` call or path and `.fence` in `t`, as `(enclosing fn, index)`.
+fn door_calls<'a>(t: &[&'a str]) -> Vec<(&'a str, usize)> {
+    let named = |i: usize| {
+        let (dot, next) = (i > 0 && t[i - 1] == ".", t.get(i + 1).copied());
+        let path = i > 1 && t[i - 2..i] == [":", ":"] && next != Some(":");
+        match t[i] {
+            "halt" => dot && next == Some("(") || path,
+            "fence" => dot,
+            _ => false,
+        }
+    };
+    production_sites(t, named)
+}
+/// Whether `t[i]` lies in the block `head` opens, the last such before it.
+fn in_arm(t: &[&str], i: usize, head: &str) -> bool {
+    let head: Vec<&str> = head.split(' ').collect();
+    let at = (0..i).rev().find(|&k| t[k..].starts_with(&head));
+    at.is_some_and(|k| i < close_of(t, k + head.len() - 1))
+}
+/// U20b: (a) another production `halt` caller, (b) another `.fence`, or the coordinator's
+/// outside its arm, (c) any `halt` in `host/src/`.
+fn door_caller_findings(sources: &[(String, String)]) -> Vec<String> {
+    let lexed: Vec<(&str, Vec<&str>)> = sources
+        .iter()
+        .filter(|(_, s)| tokens(s).is_ok())
+        .map(|(f, s)| (f.as_str(), lex(s)))
+        .collect();
+    let mods = test_mods(&lexed);
+    let clause = |file: &str, callee: &str| match (callee, file.starts_with("host/src/")) {
+        ("halt", true) => "(c)",
+        ("halt", false) => "(a)",
+        _ => "(b)",
+    };
+    let (mut listed, mut found): (Vec<&str>, _) = (DOOR_CALLERS.lines().collect(), Vec::new());
+    for (file, t) in lexed.iter().filter(|(f, _)| !caller_excluded(f, &mods)) {
+        for (within, i) in door_calls(t) {
+            let (row, which) = (format!("{file}|{within}|{}", t[i]), clause(file, t[i]));
+            match listed.iter().position(|l| *l == row) {
+                Some(at) => drop(listed.remove(at)),
+                None => found.push(format!("door callers {which}: unlisted {row}")),
+            }
+            let arm = DOOR_ARMS
+                .iter()
+                .find_map(|a| a.strip_prefix(&format!("{row}|")));
+            let closure = ["(", "self", ".", "fence", ")", "("];
+            let form = t[i] != "fence" || i > 2 && t.get(i - 3..i + 3) == Some(&closure[..]);
+            if arm.is_some_and(|head| !in_arm(t, i, head) || !form) {
+                found.push(format!("door callers {which}: {row} outside its arm"));
+            }
+        }
+    }
+    let callee = |l: &str| l.rsplit('|').next().unwrap_or("").to_string();
+    for l in listed {
+        let which = clause(l, &callee(l));
+        found.push(format!("door callers {which}: missing {l}"));
     }
     found
 }
@@ -4454,6 +4545,79 @@ fn sb3e_u20a_close_callers() {
         ),
     ] {
         let found = close_caller_findings(&planted);
+        if found != real {
+            misses.push(format!("{plant} counted as a production caller: {found:?}"));
+        }
+    }
+    fail_on(misses);
+}
+
+/// U20b (SB3E-R226 F-B): each clause of `door_caller_findings` refuses its own planted
+/// text, and the real tree passes; a comment, a string, a `#[cfg(test)]` item or module,
+/// a test file, a module path and a field are no production callers.
+#[test]
+fn sb3e_u20b_door_callers() {
+    let sources = walked().0;
+    let real = door_caller_findings(&sources);
+    let mut misses = match real.is_empty() {
+        true => Vec::new(),
+        false => vec![format!("the real tree: {real:?}")],
+    };
+    let (h, am) = ("host/src/hands.rs", "src/adapter/mod.rs");
+    let run = "    let request = screen.input().quit.take();\n";
+    let call = "fn f(d: &D) {\n    d.halt(r);\n}\n";
+    let at = |f: &str, old: &str, line: &str| planted(&sources, f, old, &format!("{line}\n{old}"));
+    let mut test_file = sources.clone();
+    test_file.push(("host/tests/u20b.rs".to_string(), call.to_string()));
+    let halt = "self.door.halt(HaltReason::JournalFailed)";
+    let ok = "(runs, Owed::default()),";
+    let poisoned = planted(&sources, am, ok, &format!("{{ let _ = {halt}; {ok} }}"));
+    let arm = format!("                    {halt}\n                }})) {{");
+    let gone = planted(&sources, am, &arm, "                })) {");
+    let withdraw = "            return self.withdraw_lite(mission);\n";
+    let append = "        if let Err(e) = self.store.append(&line) {\n";
+    let hands = at(h, run, "door.halt(r);");
+    let path = at(h, run, "Door::halt(&d, r);");
+    let fenced = at(h, run, "port.fence();");
+    let adapter = at(am, withdraw, &format!("{halt};"));
+    let outside = at("src/coordinator.rs", append, "(self.fence)();");
+    for (planted, expected) in [
+        (hands, "(c): unlisted host/src/hands.rs|run|halt"),
+        (path, "(c): unlisted host/src/hands.rs|run|halt"),
+        (fenced, "(b): unlisted host/src/hands.rs|run|fence"),
+        (adapter, "(a): unlisted src/adapter/mod.rs|withdraw|halt"),
+        (
+            poisoned,
+            "(a): src/adapter/mod.rs|locked|halt outside its arm",
+        ),
+        (gone, "(a): missing src/adapter/mod.rs|locked|halt"),
+        (
+            outside,
+            "(b): src/coordinator.rs|write_record|fence outside its arm",
+        ),
+    ] {
+        let e = format!("door callers {expected}");
+        shown(&mut misses, &e, &door_caller_findings(&planted), &[&e]);
+    }
+    for (plant, planted) in [
+        ("a comment", at(h, run, "// door.halt(r);")),
+        ("a string", at(h, run, "let _ = \"door.halt(r)\";")),
+        (
+            "a cfg(test) module",
+            at(h, run, &format!("#[cfg(test)]\nmod u {{\n{call}}}")),
+        ),
+        (
+            "a cfg(test) fn",
+            at(h, run, &format!("#[cfg(test)]\n{call}")),
+        ),
+        ("an integration test", test_file),
+        (
+            "a module path",
+            at(h, run, "use crate::authority::halt::RecordBatch;"),
+        ),
+        ("a field", at(h, run, "let _ = o.halt.pending;")),
+    ] {
+        let found = door_caller_findings(&planted);
         if found != real {
             misses.push(format!("{plant} counted as a production caller: {found:?}"));
         }

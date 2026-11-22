@@ -7,8 +7,8 @@
 // ingress cells and the R9 primary_end lifecycle cell (SB3E-R139), and
 // U21a's five R9 close_report cells (SB3E-R197, R199), U19b-1's twelve
 // R0 registration_install and 32 R5 metadata-gate cells (SB3E-R216) and
-// U19b-2's 36 R5 call cells refused at ords 1-3 (SB3E-R217). The
-// route_cells lane compiles it through
+// U19b-2's 36 R5 call cells refused at ords 1-3 (SB3E-R217),
+// U20b's twelve R6 cancel_run cells (SB3E-R226). The route_cells lane compiles it through
 // `macro_rules! cells` in main.rs, whose terminal arm is the control
 // `ctl_call_chat`; session_model_bridge.rs and check-citations.py parse it
 // as text. One entry per credited cell: `<route> <sink> <dim> <value>;`
@@ -171,4 +171,16 @@ cells! {
     r5 call_tags lifecycle Failed;
     r5 call_tags lifecycle ClosingNormal;
     r5 call_tags lifecycle ClosingRestricted;
+    r6 cancel_run ingress CR;
+    r6 cancel_run ingress LF;
+    r6 cancel_run ingress CRLF;
+    r6 cancel_run ingress EOF;
+    r6 cancel_run ingress partial_Ctrl_D;
+    r6 cancel_run ingress master_close;
+    r6 cancel_run ingress repeated;
+    r6 cancel_run ingress quit;
+    r6 cancel_run lifecycle Emergency;
+    r6 cancel_run lifecycle Failed;
+    r6 cancel_run lifecycle ClosingNormal;
+    r6 cancel_run lifecycle ClosingRestricted;
 }

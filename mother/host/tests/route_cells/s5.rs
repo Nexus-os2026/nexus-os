@@ -1403,6 +1403,11 @@ fn verdict(id: &str, returned: &Facts, render: fn(&Facts) -> String) -> Vec<Stri
             "collect: {sink} collected by collect_report {report}"
         ));
     }
+    // U20b: `collect_door` exactly for the `d_cancel` rows (cancel_run).
+    let door = *collector == "collect_door";
+    if door != (sink == DOOR.0) {
+        found.push(format!("collect: {sink} collected by collect_door {door}"));
+    }
     found
 }
 
@@ -3413,4 +3418,154 @@ fn call_drive(
         );
     }
     facts
+}
+
+// ===== U20b (SB3E-R226): the d_cancel driver =====
+/// U20b: the cancel_run rows' sink (`SessionDoor::cancel_run`, h:1400-1419), its point.
+const DOOR: (&str, &str) = ("cancel_run", "door.cancel_run");
+/// U20b (SB3E-R226 F-A, F-E): the d_cancel driver, as `closed`: a harness worker calls
+/// `SessionDoor::cancel_run` on `Opened::door`'s run (for production's `withdraw_lite`,
+/// lite_port.rs:167-170; its order: report.rs `declined`), held at `door.cancel_run`; at
+/// the bounded acknowledgement the window opens and the value is typed into the real
+/// reader (`typed`) or applied (`door_apply`), then released within `SHUTDOWN_PAUSE`.
+/// The acknowledgement is the worker's (`door_ack`); C1 (R194): the sink returns `Ok`.
+pub(super) fn d_cancel(
+    f: &Fixture,
+    row: (&'static str, &'static str),
+    value: &'static str,
+    typed: Option<&'static str>,
+) -> Facts {
+    let c = bootstrap(f); // `opened`, both traces, the sources (Q set below).
+    let (o, (door, run, request)) = (&c.o, c.o.door(&f.0));
+    drop((s1::drain_trace(), s5::drain_trace()));
+    let mut sources = SOURCES.lock().unwrap();
+    sources.as_mut().expect("d_cancel: no sources").driver.1 = request;
+    drop(sources);
+    *CLOSE_Q.lock().unwrap() = None;
+    let reading = typed.map(|_| Reading::open(o));
+    let (mut findings, held) = (Vec::new(), f.pause(DOOR.1));
+    let (ack, result, keys, keyed) = std::thread::scope(|scope| {
+        let worker = scope.spawn(|| door.cancel_run(run));
+        let keys = (o.session.identity(), request, run, worker.thread().id());
+        let ack = held.acknowledged.recv_timeout(PATIENCE).ok();
+        let mut keyed = None;
+        if ack.is_some() {
+            let at = Instant::now();
+            reopen(); // M3: the window opens at the acknowledgement.
+            match (typed, &reading) {
+                (Some(v), Some(r)) => keyed = Some(r.typed(v)),
+                _ => findings.extend(door_apply(o, value)),
+            }
+            if value != "none" {
+                *APPLIED.lock().unwrap() = Some(Instant::now());
+            }
+            let released = at.elapsed();
+            if released >= SHUTDOWN_PAUSE {
+                let late = format!("released after {released:?}, not within {SHUTDOWN_PAUSE:?}");
+                findings.push(format!("d_cancel: {late}"));
+            }
+        }
+        drop(held);
+        (ack, worker.join().unwrap(), keys, keyed)
+    });
+    if let (Some(v), Some(r)) = (typed, reading) {
+        let keyed = keyed.unwrap_or_else(|| (Vec::new(), Instant::now(), 0));
+        findings.extend(r.close(v, keyed));
+    }
+    findings.extend(door_ack(ack.as_ref(), keys).err());
+    let got = result
+        .as_ref()
+        .map_or_else(|e| format!("Err({e:?})"), |_| "Ok".to_string());
+    println!("WITNESS d_cancel {value}: the sink {got}");
+    if got != "Ok" {
+        findings.push(format!("d_cancel: the sink returned {got}, not Ok"));
+    }
+    let mut facts = collect_door(ack, run, (row, value), findings);
+    let s = facts.session;
+    let mine = |e: &&s1::Entry| e.point == "ingress.emergency" && e.session == Some(s);
+    let applications = facts.broker.iter().filter(mine).count();
+    if value == "repeated" && applications != 2 {
+        let counted = format!("d_cancel: {applications} ingress.emergency entries");
+        later(&mut facts, counted);
+    }
+    drop(result);
+    facts
+}
+/// U20b: a B2 row's value applied by the harness while the sink is held
+/// (U19a's `pressed` and `quit_two`; `quit` is Q 2, above the door's Run 1),
+/// its state read while held (as `reg_apply`).
+fn door_apply(o: &Opened, value: &str) -> Vec<String> {
+    let (want, applied) = match value {
+        "none" => return Vec::new(),
+        "repeated" => ("Emergency", pressed(o).and_then(|()| pressed(o))),
+        "Emergency" => ("Emergency", pressed(o)),
+        "Failed" => {
+            o.ingress.fail();
+            ("Failed", Ok(()))
+        }
+        "quit" | "ClosingNormal" => ("ClosingNormal", quit_two(o)),
+        "ClosingRestricted" => ("ClosingRestricted", quit_two(o).and_then(|()| pressed(o))),
+        _ => return vec![format!("d_cancel: no applier for {value}")],
+    };
+    let state = format!("{:?}", o.session.state());
+    match applied {
+        Err(e) => vec![format!("d_cancel: {value} returned {e}")],
+        Ok(()) if state != want => vec![format!("d_cancel: state {state}, not {want}")],
+        Ok(()) => Vec::new(),
+    }
+}
+/// U20b: the acknowledgement is `door.cancel_run`'s, of S, Q and RUN, on the
+/// sink's worker (never the harness's or the reader's thread).
+fn door_ack(
+    ack: Option<&s1::Entry>,
+    (s, q, run, worker): (SessionIdentity, u64, RunId, ThreadId),
+) -> Result<(), String> {
+    let ours = |a: &&s1::Entry| {
+        let keyed = (a.point, a.note, a.session, a.request, a.run)
+            == (DOOR.1, false, Some(s), Some(q), Some(run));
+        keyed && a.thread == worker
+    };
+    match ack.filter(ours) {
+        Some(_) => Ok(()),
+        None => Err(format!(
+            "d_cancel: acknowledgement {:?}, the worker {worker:?}",
+            ack.map(|a| (a.point, a.request, a.run, a.thread))
+        )),
+    }
+}
+/// U20b: `collect_close`'s collection (the window since the acknowledgement), kept as
+/// `collect_door` with the claim's RUN (the door's run) and the reader's facts.
+fn collect_door(
+    ack: Option<s1::Entry>,
+    run: RunId,
+    cell: ((&'static str, &'static str), &'static str),
+    findings: Vec<String>,
+) -> Facts {
+    let mut facts = collect_close(DOOR.1, ack, false, cell, findings);
+    let mut kept = KEPT.lock().unwrap();
+    if kept.pop().is_none_or(|k| k.0 != "collect_close") {
+        facts.findings.push("collect_door: no collection".into());
+    }
+    facts.claim = Some((run, 0));
+    facts.read = READ.lock().unwrap().take();
+    kept.push(("collect_door", facts.clone()));
+    facts
+}
+/// U20b (rule level, over a real d_cancel `quit` run): `door_ack` refuses the
+/// harness's thread and another run.
+#[test]
+fn route_s5_door_ack_binds_the_worker() {
+    child("s5::route_s5_door_ack_binds_the_worker", |f| {
+        let facts = d_cancel(f, (DOOR.0, "ingress"), "quit", None);
+        let (Some(Ack::S1(ack)), Some((run, _))) = (facts.acks.first(), facts.claim) else {
+            panic!("d_cancel: no acknowledgement");
+        };
+        let other = RunId::parse(&format!("run-{}", "0".repeat(32))).unwrap();
+        let (s, q, here) = (facts.session, facts.request, std::thread::current().id());
+        assert_eq!(door_ack(Some(ack), (s, q, run, ack.thread)), Ok(()));
+        let harness = door_ack(Some(ack), (s, q, run, here));
+        assert!(harness.is_err(), "door_ack accepted the harness's thread");
+        let elsewhere = door_ack(Some(ack), (s, q, other, ack.thread));
+        assert!(elsewhere.is_err(), "door_ack accepted another run");
+    });
 }

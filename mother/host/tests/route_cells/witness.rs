@@ -42,7 +42,7 @@ const KEYS: [&str; 7] = ["s", "q", "run", "inv", "att", "kind", "ord"];
 type Tag<'t> = (Option<&'t str>, Option<u64>);
 type Predicate = for<'a> fn(&View<'a>, &str, Tag) -> Option<Seen<'a>>;
 type Token = (&'static str, &'static str, Predicate);
-const TOKENS: [Token; 23] = [
+const TOKENS: [Token; 24] = [
     // model.call.observed, then on its thread exactly the note
     // refused:8.cas, with no model.call.admitted of the row's ord.
     ("CAS:m:774", "model.call.observed", |v, _, tag| {
@@ -93,6 +93,9 @@ const TOKENS: [Token; 23] = [
     ("note:admission", "reg.admission", after_ack),
     ("CAS:m:238", "model.gate.checked", acked),
     ("note:cas", "reg:cas", after_ack),
+    // U20b (SB3E-R226): the acknowledged door.cancel_run (host_session.rs:1405;
+    // the frozen label h:1382-1390 is `SessionDoor::cancel_run`, now h:1400-1419).
+    ("h:1382-1390", "door.cancel_run", acked),
 ];
 /// U19b-1: the admitted entry or note at `point` after the cell's last
 /// acknowledgement, on that acknowledgement's thread (the first such).
@@ -232,6 +235,7 @@ host.close_report.resources|s|host hands.rs close_report resources branch; route
 host.close_report.inventory|s|host hands.rs close_report inventory branch; route_seams.rs report
 host.close_report.model|s|host hands.rs close_report model branch; route_seams.rs report
 host.close_report.string|s|host hands.rs close_report exit; route_seams.rs report
+door.cancel_run|s q run|host_session.rs:1405; 89-91
 ";
 /// W0b A1b, A4: `key|points|carrier|source`: the only bindings of a tagged
 /// key a point does not record, each through the observed entry `carrier`
@@ -452,7 +456,7 @@ fn brackets(v: &View, points: &str) -> bool {
 }
 /// Behaviour 10: the controls' witnesses, by `(sink, dim)`, as measured at U5
 /// Step 0 (R86).
-const CONTROLS: [(&str, &str, &str); 21] = [
+const CONTROLS: [(&str, &str, &str); 22] = [
     ("call_chat", "ingress", CONTROL),
     ("close_obligations", "lifecycle", CLOSE_CONTROLS[0]),
     ("delivery", "lifecycle", CLOSE_CONTROLS[1]),
@@ -474,7 +478,13 @@ const CONTROLS: [(&str, &str, &str); 21] = [
     ("call_version", "ingress", CALL_CONTROLS[0]),
     ("call_status", "ingress", CALL_CONTROLS[1]),
     ("call_tags", "ingress", CALL_CONTROLS[2]),
+    ("cancel_run", "ingress", DOOR_CONTROL),
 ];
+/// U20b (SB3E-R226): the cancel_run control, held at `door.cancel_run` and
+/// released with no value: the sink passes (`Ok`).
+const DOOR_CONTROL: &str = "entry=door.cancel_run[s=S run=RUN];check=h:1382-1390[s=S run=RUN];\
+value=none@door.cancel_run ack=held won=route;out=passed@h:1382-1390;branch=none;\
+ledger=+0:all[s=S];window=boundary;deadline_fired=none";
 /// U19b-2 (SB3E-R217): the call controls, each held at its own ord of
 /// `model.call.observed` and released: the call completes (`charge_append=1`).
 const CALL_CONTROLS: [&str; 3] = [
@@ -2229,6 +2239,28 @@ fn tr1_stray(f: &super::Fixture) -> Facts {
     let refused: [Result<(), &str>; 1] = [Err("Restricted")];
     let row = ("registration_reserve", "ingress");
     let mut facts = super::s5::read_registered(f, row, ("CR", "stop0d"), &refused);
+    let mut stray = facts.native.first().cloned().expect("the Stop record");
+    stray.phase = nexus_governed_control::authority::evidence::EvidencePhase::ModelRegistered;
+    facts.native.push(stray);
+    facts
+}
+/// U20b (SB3E-R226 F-C; R202 S1 at d_cancel, row 171): a stray non-Stop record
+/// fails `ledger`.
+#[test]
+fn witness_control_tr1_stray_record_fails_the_cancel_run_ledger() {
+    let name = "witness::witness_control_tr1_stray_record_fails_the_cancel_run_ledger";
+    let row = ("cancel_run", "ingress", "CR");
+    differs_at(
+        name,
+        "ctl_tr1_stray_cancel_run",
+        tr1_stray_cancel_run,
+        row,
+        &["ledger"],
+    );
+}
+fn tr1_stray_cancel_run(f: &super::Fixture) -> Facts {
+    let row = ("cancel_run", "ingress");
+    let mut facts = super::s5::d_cancel(f, row, "CR", Some("stop0d"));
     let mut stray = facts.native.first().cloned().expect("the Stop record");
     stray.phase = nexus_governed_control::authority::evidence::EvidencePhase::ModelRegistered;
     facts.native.push(stray);

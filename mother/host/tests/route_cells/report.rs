@@ -492,3 +492,112 @@ fn route_report_unreleased_hold_times_out_and_aborts() {
         "unreleased: result"
     );
 }
+
+/// U20b: `needle` after `at`, or (`Err`) the hold's acknowledgement if it comes first.
+type Early = Box<Option<s1::Entry>>;
+fn prompt(tty: &Tty, at: usize, needle: &str, held: &s1::Held) -> Result<usize, Early> {
+    let deadline = Instant::now() + tty.left();
+    while Instant::now() < deadline {
+        if let Ok(ack) = held.acknowledged.try_recv() {
+            return Err(Box::new(Some(ack)));
+        }
+        if let Some(found) = tty.wait_for(at, needle, Duration::from_millis(20)) {
+            return Ok(found);
+        }
+    }
+    Err(Box::new(None))
+}
+/// U20b (SB3E-R226 F-A): the cancel_run credits' production order. `hands::run`, File
+/// mode, `approve` declined (Step 0 D1), S1 held at the first `door.cancel_run` (armed
+/// before `approve`, D6), `stop` typed while held. It fails unless the hold is on a worker
+/// (not the one `host.read` thread, `hands::run`'s or the test's), the reader reads and
+/// presses one `ingress.emergency` of the session while held, and `status` shows Emergency.
+#[test]
+fn route_report_decline_holds_cancel_run_off_the_reader() {
+    let name = "report::route_report_decline_holds_cancel_run_off_the_reader";
+    child_with(name, |_| Vec::new(), declined);
+}
+fn declined(f: &Fixture) {
+    let (mut found, args, tty) = (Vec::new(), file_mode(f, "U20b order\n"), Tty::open());
+    let host = s7::arm("host.close_report.string", s7::Action::Trace);
+    let traced = (s1::arm("reg.reserve", s1::Action::Trace), host);
+    drop((s1::drain_trace(), s7::drain_trace()));
+    let run = std::thread::spawn(move || nexus_mother_host::hands::run(args.into_iter()));
+    let ids = (run.thread().id(), std::thread::current().id());
+    let mut at = tty.wait_for(0, NORMAL, PATIENCE).unwrap_or(0);
+    let typed = tty.write(b"run\r");
+    for _ in 0..3 {
+        at = answer(&tty, at, &mut found);
+    }
+    at = tty.wait_for(at, "FILE PENDING\n", PATIENCE).unwrap_or(at);
+    let held = f.pause("door.cancel_run");
+    let typed = typed && tty.write(b"approve\r");
+    let code = prompt(&tty, at, "Answer code: ", &held);
+    let ack = match code.and_then(|code| prompt(&tty, code, "INPUT READY\n", &held)) {
+        Ok(ready) if tty.write(b"no\r") => {
+            at = ready;
+            held.acknowledged.recv_timeout(tty.left()).ok()
+        }
+        Ok(_) => None,
+        Err(early) => {
+            found.push("order: held before the decline".to_string());
+            *early
+        }
+    };
+    if ack.is_some() && tty.write(b"stop\r") {
+        let _ = tty.wait_for(at, "STOP REQUEST RECEIVED", RELEASE);
+    }
+    let released = Instant::now();
+    drop(held);
+    at = tty.wait_for(at, "OPERATION END\n", PATIENCE).unwrap_or(at);
+    let status = tty
+        .write(b"status\r")
+        .then(|| tty.wait_for(at, "STATUS END\n", PATIENCE));
+    let text = tty.text();
+    let shown = text
+        .get(at..status.flatten().unwrap_or(at))
+        .unwrap_or("")
+        .to_owned();
+    let quit = tty.write(b"quit\r");
+    let deadline = Instant::now() + tty.left();
+    while !run.is_finished() && Instant::now() < deadline {
+        let _ = tty.wait_for(usize::MAX, "\0", Duration::from_millis(5));
+    }
+    let returned = run.is_finished().then(|| run.join().ok()).flatten();
+    tty.settle();
+    drop(tty);
+    let (broker, host) = (s1::drain_trace(), s7::drain_trace());
+    drop(traced);
+    let ack = ack.unwrap_or_else(|| panic!("order: door.cancel_run not acknowledged; {found:?}"));
+    if !typed || !quit || returned.is_none() {
+        found.push(format!("order: hands::run returned {returned:?}"));
+    }
+    let reader = host
+        .iter()
+        .find(|e| e.point == "host.read")
+        .map(|e| e.thread);
+    let one = host
+        .iter()
+        .all(|e| e.point != "host.read" || Some(e.thread) == reader);
+    let worker = |t: ThreadId| t != ack.thread;
+    if !one || !reader.is_some_and(worker) || !worker(ids.0) || !worker(ids.1) {
+        found.push("order: the hold is on the reader thread or not a worker".into());
+    }
+    // The reader records `host.read` after the read's press (terminal.rs:1426-1428).
+    let window = |at: Instant| at > ack.instant && at < released;
+    let pressed = |e: &&s1::Entry| e.point == "ingress.emergency" && !e.note && window(e.instant);
+    let pressed: Vec<&s1::Entry> = broker.iter().filter(pressed).collect();
+    let on_reader = |e: &&s1::Entry| Some(e.thread) == reader && e.session == ack.session;
+    if pressed.len() != 1 || !pressed.iter().all(on_reader) {
+        found.push(format!("order: {} presses while held", pressed.len()));
+    }
+    let after = |e: &s7::Entry| pressed.first().is_some_and(|p| e.instant > p.instant);
+    let read = |e: &s7::Entry| e.point == "host.read" && Some(e.thread) == reader && after(e);
+    if !host.iter().any(read) {
+        found.push("order: the reader read nothing while held".into());
+    }
+    if !shown.contains("session=Emergency\n") {
+        found.push("order: status does not show the session Emergency".into());
+    }
+    assert!(found.is_empty(), "order: {}", found.join("; "));
+}
