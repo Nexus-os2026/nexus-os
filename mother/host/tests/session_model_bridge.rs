@@ -345,6 +345,7 @@ fault|poison|record_first_classify,emergency_restrict,close_restrict,post_record
 const DENIAL_CELLS: &str = "lifecycle|SealedFinalizing,ClosedClean,ClosedUnclean|record_first_classify,post_record_recheck,lane_result_admission";
 /// SB3E-R7, literal: `route/sink/dim/value` where `hold:` may sit over a `c:`
 /// disposition. A `c:` citation never counts, so a held one stays unresolved.
+/// U20a (SB3E-R214 TR-1): rows 269-271 join it.
 const HOLD_ON_CITED: &str = "\
 R2/inference_binding/ingress/grant_revocation
 R2/inference_binding/ingress/grant_expiry
@@ -360,6 +361,9 @@ R9/close_obligations/fault/poison
 R5/call_version/schedule/after
 R5/call_status/schedule/after
 R5/call_tags/schedule/after
+R6/emergency_restrict/ingress/CR
+R6/emergency_restrict/ingress/LF
+R6/emergency_restrict/ingress/CRLF
 ";
 /// Design 4.4, literal: sinks|driver|entry|check|exit.
 const SINK_POINTS: &str = "\
@@ -1033,8 +1037,8 @@ fn check_expect_table(c: &Context) -> Result<(), String> {
     }
     let (amend, denial) = (listed_cells(AMEND_CELLS), listed_cells(DENIAL_CELLS));
     let cited: Vec<_> = HOLD_ON_CITED.lines().collect();
-    if cited.len() != 14 {
-        return Err(format!("HOLD_ON_CITED: {} entries, not 14", cited.len()));
+    if cited.len() != 17 {
+        return Err(format!("HOLD_ON_CITED: {} entries, not 17", cited.len()));
     }
     for entry in &cited {
         let f: Vec<_> = entry.split('/').collect();
@@ -2895,8 +2899,9 @@ fn sb3e_expect_table_is_complete() {
             by_status["hold"]
         ),
         // U21a (SB3E-R197 TR-1): six close_report rows held, unreachable by
-        // production order (rows 222-224, 232-234).
-        (754, 25, 9, 117)
+        // production order (rows 222-224, 232-234). U20a (SB3E-R214): the 35
+        // close-sink byte rows (205-211, 235-241, 269-275, 377-383, 501-507).
+        (719, 25, 9, 152)
     );
 }
 /// Tampers with the checked-in table, through the verifier on the real files.
