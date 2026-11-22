@@ -1762,9 +1762,11 @@ x:212, 242, 276, 384, 509; door_fence x:216, 246, 280, 388, 512; fatal x:217, 24
 ClosedUnclean x:578; fault none x:756, 764, 773, 804, 841; record_failed x:757, 842;
 record_unknown x:759, 845; panic x:760, 767, 776, 806, 844; poison x:805; schedule x:866,
 867, 870, 871, 875, 876, 887, 888, 905, 906. **F-S0-B (binding, R214):** a bare terminator
-renders the frozen close byte rows byte-equal through `read_ack`'s bare arm (x:205, 235,
-377); every later unit that credits a byte row keeps that arm from rendering `read` for a
-byte row, with a bare-terminator plant (joins U19a's R202 C1).
+rendered the frozen close byte rows byte-equal through `read_ack`'s bare arm (x:205, 235,
+377). Closed by U19b-1's renderer tie guard (reader.rs `tied`, called in witness.rs's read
+arm; 14.20 F7): a byte row's value admits exactly one reader value, so a bare terminator
+renders `ack=unread[..]` for every byte row; the bare-terminator plants are
+`u19b1_p_bare_d_register` and `u19b1_p_bare_d_call` (closes U19a's R202 C1).
 
 ### 14.20 SB-3E U19b-1: registration install and metadata gates (SB3E-R216, R216.1)
 
