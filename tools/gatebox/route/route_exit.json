@@ -1,7 +1,7 @@
 {
  "about": [
   "SB-3E U4 exit gate data (route_exit.py). inventory: the lane harness's names as U5b lists them",
-  "(SB3E-R86.4, U5b: 48 names; W0b: 50; its fix rounds 1 and 2: 52, 53; U9a: 73; U6a-1: 81; U9b: 90; U18: 91; U9b+U18 merge: 100; SEAM-1: 113; U19a: 154, R202: 155; U21a: 164; U19b-1: 214; G2 with U20a: 214; U19b-2 on G2: 253) and their sha256 under the policy rule (route-cells.json `inventory`).",
+  "(SB3E-R86.4, U5b: 48 names; W0b: 50; its fix rounds 1 and 2: 52, 53; U9a: 73; U6a-1: 81; U9b: 90; U18: 91; U9b+U18 merge: 100; SEAM-1: 113; U19a: 154, R202: 155; U21a: 164; U19b-1: 214; G2 with U20a: 214; U19b-2 on G2: 253; U20b: 269) and their sha256 under the policy rule (route-cells.json `inventory`).",
   "desktop_tests: the desktop package's tests the gate runs besides lib and bins (`live` needs a desktop).",
   "plants: route_plants.json's plant count and sha256 of its names (LF-joined, in order); the same for the names without `expect` (sorted; R53: the two only a refused build kills); file_sha256: the whole file (R55.6)."
  ],
@@ -16,6 +16,7 @@
    "cells::ctl_call_status",
    "cells::ctl_call_tags",
    "cells::ctl_call_version",
+   "cells::ctl_cancel_run",
    "cells::ctl_close_obligations",
    "cells::ctl_close_report",
    "cells::ctl_close_restrict",
@@ -168,6 +169,18 @@
    "cells::rc_r5_registration_version_ingress_partial_ctrl_d",
    "cells::rc_r5_registration_version_ingress_quit",
    "cells::rc_r5_registration_version_ingress_repeated",
+   "cells::rc_r6_cancel_run_ingress_cr",
+   "cells::rc_r6_cancel_run_ingress_crlf",
+   "cells::rc_r6_cancel_run_ingress_eof",
+   "cells::rc_r6_cancel_run_ingress_lf",
+   "cells::rc_r6_cancel_run_ingress_master_close",
+   "cells::rc_r6_cancel_run_ingress_partial_ctrl_d",
+   "cells::rc_r6_cancel_run_ingress_quit",
+   "cells::rc_r6_cancel_run_ingress_repeated",
+   "cells::rc_r6_cancel_run_lifecycle_closingnormal",
+   "cells::rc_r6_cancel_run_lifecycle_closingrestricted",
+   "cells::rc_r6_cancel_run_lifecycle_emergency",
+   "cells::rc_r6_cancel_run_lifecycle_failed",
    "cells::rc_r6_close_restrict_lifecycle_emergency",
    "cells::rc_r6_close_restrict_lifecycle_failed",
    "cells::rc_r6_emergency_restrict_lifecycle_bootstrap",
@@ -207,6 +220,7 @@
    "reader::route_reader_read_failure",
    "reader::route_reader_unarmed_records_nothing",
    "reader::route_s6_binds_the_stop_route",
+   "report::route_report_decline_holds_cancel_run_off_the_reader",
    "report::route_report_panic_unwinds_the_close_worker",
    "report::route_report_unarmed_records_nothing",
    "report::route_report_unreleased_hold_times_out_and_aborts",
@@ -222,6 +236,7 @@
    "s5::route_s5_close_credit_plants_each_refuse",
    "s5::route_s5_close_window_opens_at_the_hold",
    "s5::route_s5_collect_broker_on_registration",
+   "s5::route_s5_door_ack_binds_the_worker",
    "s5::route_s5_gate_ack_binds_the_exchange_thread",
    "s5::route_s5_join_plants_each_refuse",
    "s5::route_s5_panicking_call_is_counted",
@@ -258,6 +273,7 @@
    "witness::witness_control_quit_other_session_fails_in_entry_and_check",
    "witness::witness_control_registration_other_request_unbinds_the_ledger",
    "witness::witness_control_registration_other_session_fails_in_entry_and_check",
+   "witness::witness_control_tr1_stray_record_fails_the_cancel_run_ledger",
    "witness::witness_control_tr1_stray_record_fails_the_ledger",
    "witness::witness_native_ledger_binds_by_fixture_and_request",
    "witness::witness_renderer_controls_each_differ",
@@ -266,13 +282,13 @@
    "witness::witness_token_map_plants_each_fail",
    "witness::witness_wave_rows_render_from_recorded_identity"
   ],
-  "sha256": "452a8dcf4183384d67bef826af1a10c7a87b7be0ed1d4836ff2fb6a72027e218"
+  "sha256": "ebf350a47f37233af44d14effbcd4d0f9679660c8b035e439803439e977b72d7"
  },
  "plants": {
-  "count": 417,
-  "names_sha256": "a56c0a4987d816cdbb0f33680fce9043330a19889e40e447a91978cf14ba01d6",
+  "count": 426,
+  "names_sha256": "549fd8e984197a03e594c0efe87c8b794432fa62e513d1e570b9e25d06687c0b",
   "without_expect_sha256": "7d0ab87de1767d50461282e38349a037a95a66a2a389dd9e4075bc61bf35940d",
   "without_expect_count": 2,
-  "file_sha256": "a2469bfd73483a1a1285010fd7bd348784e2a0cb74df3838242f6c9f24b36fd6"
+  "file_sha256": "c165efb1a0d2ed9f885830c530fa30489680a38b41bb2a588e980cea45587ec2"
  }
 }

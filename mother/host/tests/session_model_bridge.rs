@@ -306,7 +306,7 @@ delivery|sb3_mother_post_seal_model_events_are_absent
 /// the verifier compares them. It shows consistency, not that a test ran.
 const CELLS_RS: &str = include_str!("route_cells/cells.rs");
 const EXPECT: &str = include_str!("session/model-bridge-expect.tsv");
-const EXPECT_SHA256: &str = "cbf6b97aa6b5b7a49334d36af017f92eeee68a78cdced5e034812b3bffed16e7";
+const EXPECT_SHA256: &str = "45e85ba95432c3634994ebf0039c16c4248493b2d1a0f3b39270386ef48dbfef";
 const UNIVERSE_SHA256: &str = "a6a5337538a92d273dd2efdcaedcf76843bbf2f3ddc6be1f6f44f3c241985fd2";
 const EXPECT_HEADER: &str = "route\tsink\tdim\tvalues\tmech\tsetup\tdriver\tentry\tcheck\texit\texec\tapply\texpect\twitness\tcontrol\tplant\trefs\tstatus";
 /// R4: `reader:` is these literal bytes, or one of the three closed paths.
@@ -2108,8 +2108,8 @@ fn sb3d_r3_d1_cells_are_executed_or_owned() {
             count("open:F1"),
             count("open:M2e-D")
         ),
-        (202, 0, 553, 1, 28),
-        "after D2, U5b's six, U9a's eleven, U6a-1's three, U9b's five, SEAM-1's seven, U19a's 40, U21a's five, U19b-1's 44 and U19b-2's 36 credited cells: {summary:?}"
+        (214, 0, 541, 1, 28),
+        "after D2, U5b's six, U9a's eleven, U6a-1's three, U9b's five, SEAM-1's seven, U19a's 40, U21a's five, U19b-1's 44, U19b-2's 36 and U20b's 12 credited cells: {summary:?}"
     );
     assert_eq!(
         count("cited"),
@@ -2128,7 +2128,8 @@ fn sb3d_r3_d1_cells_are_executed_or_owned() {
 /// U21a (SB3E-R197, R199): the five set-B R9 close_report cells (rows 580,
 /// 581, 761, 868, 869). U19b-1 (SB3E-R216): twelve registration_install and
 /// 32 metadata-gate cells. U19b-2 (SB3E-R217): 36 call cells at ords 1-3.
-const CREDITED: [&str; 157] = [
+/// U20b (SB3E-R226): twelve R6 cancel_run cells.
+const CREDITED: [&str; 169] = [
     "r5/call_chat/ingress/original_cell_unscheduled",
     "r5/call_chat/ingress/repeated",
     "r5/call_chat/ingress/mission_stop",
@@ -2286,6 +2287,18 @@ const CREDITED: [&str; 157] = [
     "r5/call_tags/lifecycle/Failed",
     "r5/call_tags/lifecycle/ClosingNormal",
     "r5/call_tags/lifecycle/ClosingRestricted",
+    "r6/cancel_run/ingress/CR",
+    "r6/cancel_run/ingress/LF",
+    "r6/cancel_run/ingress/CRLF",
+    "r6/cancel_run/ingress/EOF",
+    "r6/cancel_run/ingress/partial_Ctrl_D",
+    "r6/cancel_run/ingress/master_close",
+    "r6/cancel_run/ingress/repeated",
+    "r6/cancel_run/ingress/quit",
+    "r6/cancel_run/lifecycle/Emergency",
+    "r6/cancel_run/lifecycle/Failed",
+    "r6/cancel_run/lifecycle/ClosingNormal",
+    "r6/cancel_run/lifecycle/ClosingRestricted",
 ];
 /// U5b: `manifest` with the six credited entries first, for a control whose
 /// register keeps the real one's six `x:rc_` cells (each control's own

@@ -1874,3 +1874,50 @@ door_fence x:131, 148, 165; fatal x:132, 149, 166; budget x:134, 151, 168; grant
 153, 170; Normal x:546, 551, 556; fault none x:737, 741, 745, poison x:738, 742, 746, panic
 x:740, 744, 748; schedule before x:856, 858, 860. W2 unchanged: decline x:739, 743, 747; hold
 x:857, 859, 861.
+
+### 14.22 SB-3E U20b: cancel_run credits and the door_halt disposition (SB3E-R226)
+
+**Credited (12, set B): real sink, harness worker; production order measured by the retained
+control.** x:171-176 (CR, LF, CRLF, EOF, partial_Ctrl_D, master_close: typed on the real reader,
+`Reading` as hands.rs:1119, :1157, `reader::tied` applying, F-D), x:179, 184 (repeated, quit) and
+x:562-565 (Emergency, Failed, ClosingNormal, ClosingRestricted), applied while held. Each drives
+`SessionDoor::cancel_run` (host_session.rs:1400-1419, held at `door.cancel_run`, :1405) on the real
+session's door and File run, called by a harness worker (`s5.rs` `d_cancel`, the `closed` pattern)
+for production's `withdraw_lite` (`mother/src/adapter/lite_port.rs:167-170`), whose own writes race
+in the window (F-E). C1 (R194): the sink returns `Ok`; the acknowledgement is the worker's, of S, Q
+and RUN (`door_ack`). **Production order (F-A):** `report::route_report_decline_holds_cancel_run_off_the_reader`
+runs production `hands::run` (File mode, `approve` declined: hands.rs:386-402, coordinator.rs:1738,
+coordinator/lite_settle.rs:468-504), held at the first `door.cancel_run` on `hands-work`
+(hands.rs:1360) while the reader lives (until hands.rs:1390). It fails unless the hold is on a worker
+(not the reader, nor `hands::run`'s or the test's thread), the reader reads `stop` and presses exactly
+one `ingress.emergency` while it stands, and `status` shows `session=Emergency`. **F-F (ledger
+note):** x:179, 184, 562-565 apply with no bound Stop route, so their ledger is the frozen `+0`; in
+production the bound Stop adds one `emergency_stop` record (U19a's lifecycle class).
+
+**TR-1 (F-C).** x:171-176: `ledger=+0:all[s=S]` → `+1:emergency_stop[s=S]` (the bound Stop,
+hands.rs:1157, as 14.17; R202 S1 whole-window clause and its control). x:177 waits for GB4b.
+
+**door_halt: W3 by event (F-B; R197 Q-U21-4), table rows kept `open` for U22's W3 report.**
+
+| Rows | Event entering the sink | Static proof and guard |
+|---|---|---|
+| x:252-257 (CR, LF, CRLF, EOF, partial_Ctrl_D, master_close) | failed journal append; poisoned port mutex | below; `door_caller_findings` |
+| x:260, 265 (repeated, quit) | the same | the same |
+| x:591-594 (Emergency, Failed, ClosingNormal, ClosingRestricted) | the same | the same |
+
+Static proof for each: `SessionDoor::halt` (host_session.rs:1429-1439) is called
+only by `PortDoor::halt` (`mother/src/adapter/session_port.rs:127-130`), called only in
+`GovernedPort::locked`'s poison arm (`mother/src/adapter/mod.rs:376`, a panic under the port mutex)
+and `GovernedPort::fence` (:895), reached only through the coordinator's closure (coordinator.rs:1119),
+invoked only on a failed journal append (coordinator.rs:754-763): internal faults, never an Owner act
+(Step 0: 0 entries in 120 runs). Guard `door_caller_findings` (route_seams_guard.rs; rule test
+`sb3e_u20b_door_callers`; U20a's scoping and walk `production_sites`): every production `halt` call
+or path and `.fence` equals `DOOR_CALLERS`, the pinned two inside their arms (`DOOR_ARMS`). It fails on
+(a) another `halt` caller, (b) another `.fence` or one outside the append-failure arm, (c) a `halt` in
+`mother/host/src`; then the 13 rows reopen as set B.
+
+**Ledger by key.** read_failure x:177, 258 (GB4b). W1 (U22): mission_stop x:180, 261; stop_all
+x:181, 262; grant_revocation x:186, 267. W3 (29): original_cell_unscheduled x:178, 259; door_fence
+x:182, 263; fatal x:183, 264; budget x:185, 266; grant_expiry x:187, 268; Normal x:561, 590;
+SealedFinalizing x:566, 595; ClosedClean x:567, 596; ClosedUnclean x:568, 597; fault none x:749, 769;
+decline x:750; poison x:751, 771; panic x:752, 772; schedule x:862, 863, 873, 874. W2: x:6-9, 770.
