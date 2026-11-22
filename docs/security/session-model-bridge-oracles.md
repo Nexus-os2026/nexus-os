@@ -1967,8 +1967,11 @@ event of the session is pending or in flight (the bound Stop's worker has finish
 - T2 (F5): the 5 credited ledgers `+0:all[s=S]` → `+1:MissionEnd[s=S],+1:run_cancelled[s=S]`
   under the R202 S1 whole-window clause (the named counts must sum to the window, else
   ` of <whole>`). LEDGER gains `MissionEnd` (the journal's Stop, Block or Fail transition) and
-  native `run_cancelled`; `+N:all` stays refused. Each was identical in every run after the
-  barrier (10 sequential, 10 parallel, 11 whole-lane runs).
+  native `run_cancelled`; `+N:all` stays refused. The settle barrier runs on the typed path only
+  (the held-out byte rows and the rule test); the five credited rows have no bound Stop route,
+  the harness thread applies the value, and every window record is written on the advancing
+  worker before it is joined, so their ledger is deterministic by construction (identical in 10
+  sequential, 10 parallel and 11 whole-lane runs; R233 C2).
 
 **Not credited, M-5b (F5, S2).** The six bind byte rows x:299-304 still vary after the barrier:
 the bound Stop's worker and the coordinator's `door.cancel_run` race to cancel the run, and when

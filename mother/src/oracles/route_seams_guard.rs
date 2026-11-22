@@ -1423,11 +1423,13 @@ const DOOR_ARMS: [&str; 2] = [
     "src/adapter/mod.rs|locked|halt|Err ( poisoned ) = > {",
     "src/coordinator.rs|write_record|fence|if let Err ( e ) = self . store . append ( & line ) {",
 ];
-/// Each pinned site's form (`file|fn|callee|tokens holding it`): `(self.fence)()` (:763) and
-/// the closure `fence: Box::new(move || fencer.fence())` (:1119, R231 C1).
-const DOOR_FORMS: [&str; 2] = [
+/// Each pinned site's form (`file|fn|callee|tokens holding it`): `(self.fence)()` (:763),
+/// the closure `fence: Box::new(move || fencer.fence())` (:1119, R231 C1), and (R234 C5)
+/// close_report's four `o.halt.<field>` reads (hands.rs:804).
+const DOOR_FORMS: [&str; 3] = [
     "src/coordinator.rs|write_record|fence|( self . fence ) (",
     "src/coordinator.rs|open|fence|fence : Box : : new ( move | | fencer . fence ( ) )",
+    "host/src/hands.rs|close_report|halt|o . halt .",
 ];
 /// Each non-test `halt` or `fence` in `t` but its `fn`, as `(enclosing fn, index)`.
 fn door_calls<'a>(t: &[&'a str]) -> Vec<(&'a str, usize)> {
@@ -4616,6 +4618,11 @@ fn sb3e_u20b_door_callers() {
         "let Inner { fence, .. } = &mut *inner;\n        fence();",
     );
     let raw = at(h, run, "door.r#halt(r);");
+    // R234 C5: one `o.halt.<field>` read dropped and a `door.halt` call added in close_report.
+    let read = ", o.halt.lost)),";
+    let head = "    fn close_report(&self, stage: &str) -> String {\n";
+    let swapped = planted(&sources, h, read, ", 0)),");
+    let swapped = planted(&swapped, h, head, &format!("{head}        door.halt(r);\n"));
     // R231 C1: an eager `fence` in `open` beside its closure.
     let fencer = "        let fencer = port.clone();\n";
     let eager = planted(
@@ -4630,6 +4637,10 @@ fn sb3e_u20b_door_callers() {
         (bound, "(b): unlisted src/coordinator.rs|write_record|fence"),
         (raw, "(c): unlisted host/src/hands.rs|run|halt"),
         (eager, "(b): src/coordinator.rs|open|fence outside its form"),
+        (
+            swapped,
+            "(c): host/src/hands.rs|close_report|halt outside its form",
+        ),
         (hands, "(c): unlisted host/src/hands.rs|run|halt"),
         (path, "(c): unlisted host/src/hands.rs|run|halt"),
         (fenced, "(b): unlisted host/src/hands.rs|run|fence"),
