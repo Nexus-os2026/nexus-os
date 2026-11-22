@@ -1773,3 +1773,50 @@ M-5b (hands.rs:1312-1323). Binding on M-5b: a production-order guard (the page c
 worker or exchange thread, never the reader; the reader stays live until after the work join,
 hands.rs:1363-1364; Stop is bound before the run, hands.rs:1130), a re-run of every call row on
 M-5b's composition, and U22's set-B check re-run after M-5b and before O-4.
+
+### 14.21 SB-3E U19b-2: model-call metadata sinks (SB3E-R216, R216.1, R217)
+
+**Credited (36, set B), harness composition until M-5b.** Each cell drives the real call sink
+code on the real session through the harness's own model lane (`s5.rs` `ModelLane`); the
+shipped binary makes no model call before M-5b (`hands.rs:1312-1323`). The call's ords 1-3
+are `check_runtime`'s metadata requests (`ollama.rs:137`; `/api/version` :249, `/api/status`
+:265, `/api/tags` :285), before its charge (:138). Each row is held at its own ord from the
+call's first arrival (`s5.rs` `called`, as `ord3_quit`).
+
+| Rows | Sink (ord) | Value | How |
+|---|---|---|---|
+| x:154-159, 137-142, 120-125 | call_version (1), call_tags (3), call_status (2) | CR, LF, CRLF, EOF, partial_Ctrl_D, master_close | typed on the reader (`Reading`, as hands.rs:1092, :1130) while the ord's `model.call.observed` is held |
+| x:162, 167, 145, 150, 128, 133 | the same | repeated, quit | applied while held |
+| x:557-560, 552-555, 547-550 | the same | Emergency, Failed, ClosingNormal, ClosingRestricted | reached while the ord's `call.gate` is held |
+
+**F1 (binding on M-5b, restated).** These 36 rows, U19a's x:86-91 and 534-537, are listed as
+"harness composition until M-5b". M-5b owes: a production-order guard (the page call runs on
+a worker or exchange thread, never the reader; the reader stays live until after the work
+join, hands.rs:1363-1364; Stop is bound before the run, hands.rs:1130); a re-run of every
+call row on M-5b's own composition; and U22's set-B check re-run after M-5b and before O-4.
+
+**Harness pieces (R216 F6).** The ord-n profile (`refused_at`: `n` gates, no charge or settle,
+no charge position); INV bound by the Builder's `mother.recheck` of S and Q
+(`model_calls.rs:491`; CORRELATIONS row `recheck`), since `mother.charge.entry` follows ord 3;
+`next` key `charge_append`, the Builder's entries into the next sink (`mother.charge.entry`,
+`model_calls.rs:216`); `CAS:m:774` and `note:8` at the row's kind and ord (U5's chat keeps
+`chat`, 4); T6 at the row's ord (the ord-n metadata gate and the Builder's `mother.recheck`,
+where the chat and the charge do not exist). C1: the advance must end `Err(Stopped)` (every
+value, measured; a bare terminator gives `Ok`), the controls `Ok`. F7: every byte row passes
+`reader::tied`; plant `u19b2_p_bare_d_call_b` types a bare CR. main.rs raises
+`recursion_limit` to 256 (the manifest's 157 entries).
+
+**TR-1, kind (R216.1 F-B1 rule; data commit).** A held-and-refused request is never sent
+(exchange.rs:295), so its name is not observable; S1 records `metadata` (route_seams.rs:128-132).
+Every tagged row of call_version, call_status and call_tags (78: x:120-170, 546-560, 737-738,
+740-742, 744-746, 748, 856, 858, 860): the entry tag `kind=<name>` becomes `kind=metadata`,
+the check tag loses `kind`, the ord is kept. The name comes from the ord in the fixed sequence
+above, not from an observation.
+
+**Ledger by key, not credited (W1 9, W3 30; the mission's "38 W3" is 30 by `rows.py`).**
+read_failure x:126, 143, 160 (GB4b, R46.3). W1: mission_stop x:129, 146, 163; stop_all x:130,
+147, 164; grant_revocation x:135, 152, 169. W3: original_cell_unscheduled x:127, 144, 161;
+door_fence x:131, 148, 165; fatal x:132, 149, 166; budget x:134, 151, 168; grant_expiry x:136,
+153, 170; Normal x:546, 551, 556; fault none x:737, 741, 745, poison x:738, 742, 746, panic
+x:740, 744, 748; schedule before x:856, 858, 860. W2 unchanged: decline x:739, 743, 747; hold
+x:857, 859, 861.
