@@ -1135,18 +1135,21 @@ fn order_findings(hands: &str) -> Vec<String> {
     }
     found
 }
-/// U20a (SB3E-R214, R214.2; docs 14.19 O1-O3): every production call site of
+/// U20a (SB3E-R214, R214.2-3; docs 14.19 O1-O3): every production occurrence of
 /// the close sinks' callees and, one level up (S1), of their callers, as
-/// `file|enclosing fn|callee[*count]`, over tokens (a comment or literal is
-/// no call). R9: only `Runtime::close` on hands-close; R6 and Stop: only the
-/// reader thread's `read_input`.
+/// `file|enclosing fn|callee[*count]`, over tokens (a comment or literal is not
+/// one; same-named locals and fields count too). R9: only `Runtime::close` on
+/// hands-close; R6 and Stop: only the reader thread's `read_input`.
 const CLOSE_CALLERS: &str = "\
 host/src/hands.rs|close|settle_close_resources
 host/src/hands.rs|close|seal_close
 host/src/hands.rs|close_report|close_obligations
 host/src/hands.rs|close|close_report*2
-host/src/hands.rs|run|close
+host/src/hands.rs|run|close*9
+host/src/hands.rs|-|close*2
+host/src/hands.rs|run|close_report*3
 host/src/stop.rs|press|emergency
+src/coordinator.rs|advance|emergency*2
 host/src/terminal.rs|receive|accept*2
 host/src/terminal.rs|receive|press*2
 host/src/terminal.rs|read_input|press*2
@@ -1154,6 +1157,11 @@ host/src/terminal.rs|goal_line|receive*3
 host/src/terminal.rs|route_read|receive*2
 host/src/terminal.rs|read_input|receive
 host/src/terminal.rs|route_read|goal_line
+host/src/terminal.rs|-|goal_line
+host/src/terminal.rs|goal_begin|goal_line
+host/src/terminal.rs|goal_end|goal_line
+host/src/terminal.rs|publish_goal|goal_line
+host/src/terminal.rs|read_goal_inner|goal_line
 host/src/terminal.rs|read_input|route_read
 host/src/terminal.rs|open|read_input
 ";
@@ -1179,81 +1187,58 @@ const GUARDED: [(&str, &str, &str, &str); 12] = [
     ),
 ];
 /// Not production (R214.2 S3, exact paths; (e) keeps the legacy modules off the shipped
-/// path), beside the modules declared under `#[cfg(test)]` and their files.
+/// path), beside the modules declared under `#[cfg(test)]` and their files. The
+/// `src/adapter/` files are test modules loaded by `#[path]` (R214.3 D2): adapter/lite.rs:331
+/// (lite.rs is test-only, adapter/mod.rs:1346-1347); coordinator/lite.rs:62, :87, :92, :102,
+/// :470; private_file.rs:283; session_close_oracles_tests.rs:194, :196.
 const CALLER_EXCLUDED: &str =
-    "host/tests/ host/examples/ desktop/tests/ host/src/legacy_terminal.rs host/src/legacy_stop.rs";
+    "host/tests/ host/examples/ desktop/tests/ host/src/legacy_terminal.rs \
+host/src/legacy_stop.rs src/adapter/lite_review2_mixed.rs src/adapter/lite_review3.rs \
+src/adapter/session_continuation_oracles_tests.rs src/adapter/session_close_oracles_tests.rs \
+src/adapter/session_budget_fix1_tests.rs src/adapter/session_terminal_fix2_tests.rs \
+src/adapter/private_session_oracles_tests.rs src/adapter/session_lifecycle_fix1_tests.rs \
+src/adapter/session_native_record_fix1_tests.rs";
 /// Clause (e): the shipped host files, and `lib.rs` but for its `mod` lines.
 const SHIPPED: &str =
     "host/src/bin/ host/src/hands.rs host/src/terminal.rs host/src/stop.rs host/src/lib.rs";
 fn caller_excluded(file: &str, test_mods: &[String]) -> bool {
     let named = |e: &&str| file == *e || e.ends_with('/') && file.starts_with(e);
-    CALLER_EXCLUDED.split(' ').any(|e| named(&e))
+    CALLER_EXCLUDED.split_whitespace().any(|e| named(&e))
         || test_mods
             .iter()
-            .any(|m| file == m || file == format!("{m}.rs") || file.starts_with(&format!("{m}/")))
+            .any(|m| file == format!("{m}.rs") || file.starts_with(&format!("{m}/")))
 }
 /// `#[cfg(test)]` at `t[i..]`.
 fn cfg_test(t: &[&str], i: usize) -> bool {
     t.get(i..i + 7) == Some(&["#", "[", "cfg", "(", "test", ")", "]"][..])
 }
-/// The modules a file declares (a path without `.rs`, or a `#[path]` file,
-/// `..` resolved), each with whether it is declared under `#[cfg(test)]`.
-fn declared(file: &str, t: &[&str]) -> Vec<(String, bool)> {
-    let stem = file.strip_suffix(".rs").unwrap_or(file);
-    let dir = stem.rsplit_once('/').map_or("", |p| p.0);
-    let root = ["/mod", "/lib", "/main"].iter().any(|e| stem.ends_with(e));
-    let (mut found, mut test, mut path) = (Vec::new(), false, None);
-    for i in 0..t.len() {
-        test = (test || cfg_test(t, i)) && !matches!(t[i], ";" | "{" | "}");
-        if t[i] == "path" && t.get(i + 1) == Some(&"=") {
-            path = t.get(i + 2).map(|p| p.trim_matches('"'));
-        }
-        if t[i] == "mod" && t.get(i + 2) == Some(&";") {
-            let child = match path {
-                Some(p) => format!("{dir}/{p}"),
-                None => format!("{}/{}", if root { dir } else { stem }, t[i + 1]),
-            };
-            let mut parts: Vec<&str> = Vec::new();
-            for part in child.split('/') {
-                match part {
-                    ".." => {
-                        parts.pop();
-                    }
-                    _ => parts.push(part),
-                }
+/// The modules a file declares under `#[cfg(test)]` at their default path
+/// (R214.3 D2: a `#[path]` module is not followed; a test module loaded that way
+/// is named in `CALLER_EXCLUDED`).
+fn test_mods(lexed: &[(&str, Vec<&str>)]) -> Vec<String> {
+    let mut found = Vec::new();
+    for (file, t) in lexed {
+        let stem = file.strip_suffix(".rs").unwrap_or(file);
+        let root = ["/mod", "/lib", "/main"].iter().any(|e| stem.ends_with(e));
+        let parent = if root {
+            stem.rsplit_once('/').map_or("", |p| p.0)
+        } else {
+            stem
+        };
+        let (mut test, mut path) = (false, false);
+        for i in 0..t.len() {
+            let open = !matches!(t[i], ";" | "{" | "}");
+            test = (test || cfg_test(t, i)) && open;
+            path = (path || t[i] == "path" && t.get(i + 1) == Some(&"=")) && open;
+            if test && !path && t[i] == "mod" && t.get(i + 2) == Some(&";") {
+                found.push(format!("{parent}/{}", t[i + 1]));
             }
-            found.push((parts.join("/"), test));
-        }
-        if matches!(t[i], ";" | "{" | "}") {
-            path = None;
         }
     }
     found
 }
-/// The test-only modules: declared under `#[cfg(test)]`, or by a test-only file.
-fn test_mods(lexed: &[(&str, Vec<&str>)]) -> Vec<String> {
-    let all: Vec<(&str, Vec<(String, bool)>)> =
-        lexed.iter().map(|(f, t)| (*f, declared(f, t))).collect();
-    let mut mods: Vec<String> = all
-        .iter()
-        .flat_map(|(_, d)| d.iter().filter(|c| c.1).map(|c| c.0.clone()))
-        .collect();
-    loop {
-        let more: Vec<String> = all
-            .iter()
-            .filter(|(f, _)| caller_excluded(f, &mods))
-            .flat_map(|(_, d)| d.iter().map(|c| c.0.clone()))
-            .filter(|c| !mods.contains(c))
-            .collect();
-        if more.is_empty() {
-            return mods;
-        }
-        mods.extend(more);
-    }
-}
-/// Each non-test call site of `t` as `(enclosing fn, callee)`: `.name(..)`
-/// (`accept` with arguments; `emergency` and `press` without), and in any
-/// form (S2) a path `Type::name` or a bare `name(..)`. A pending
+/// Each non-test occurrence in `t` of a guarded callee as `(enclosing fn,
+/// callee)`. A pending
 /// `#[cfg(test)]` ends at its item's `;`, block or `}`, and (S4) at a `,`,
 /// `)` or `]` of its own level.
 fn close_calls<'a>(file: &str, t: &[&'a str]) -> Vec<(&'a str, &'a str)> {
@@ -1288,18 +1273,11 @@ fn close_calls<'a>(file: &str, t: &[&'a str]) -> Vec<(&'a str, &'a str)> {
             ")" | "]" if test => depth -= 1,
             _ => {}
         }
-        let (prev, next) = (t[i.saturating_sub(1)], t.get(i + 1).copied());
-        let empty = t.get(i + 2) == Some(&")");
-        let called = match (prev, next, t[i]) {
-            (_, Some("::"), _) | ("fn", _, _) => false,
-            (".", Some("("), "accept") => !empty,
-            (".", Some("("), "emergency" | "press") => empty,
-            (".", n, _) => n == Some("("),
-            ("::", _, _) => true,
-            (_, n, _) => n == Some("("),
-        };
+        // R214.3 D1: every occurrence counts (a call, a method value, a `use`
+        // alias), but for the callee's own `fn` definition.
+        let called = i > 0 && t[i - 1] != "fn";
         let guarded = GUARDED.iter().any(|g| g.0 == t[i] && file.starts_with(g.2));
-        if guarded && i > 0 && called && !test && !stack.iter().any(|s| s.1) {
+        if guarded && called && !test && !stack.iter().any(|s| s.1) {
             found.push((stack.iter().rev().find_map(|s| s.0).unwrap_or("-"), t[i]));
         }
     }
@@ -4366,6 +4344,7 @@ fn sb3e_u20a_close_callers() {
         ),
         ("screen.stop.press();", "(c)", "press"),
         ("screen.receive(Line::Stop, false);", "(c)", "receive"),
+        ("let f = SessionIngress::emergency;", "(b)", "emergency"),
     ] {
         let expected = format!("close callers {clause}: unlisted {h}|run|{callee}");
         let found = close_caller_findings(&at(run, line));
@@ -4387,6 +4366,10 @@ fn sb3e_u20a_close_callers() {
     let hooked = format!("{hooked} -> Option<T> {{\n    screen.stop.press();\n");
     let accepts = "fn q(i: &I) { i.accept(k, 9); }";
     let press = "fn f(s: &S) {\n    s.stop.press();\n}\n";
+    let (lib, stop) = ("host/src/lib.rs", "mod stop;\n");
+    let receive = at(run, "screen.receive(Line::Stop, false);");
+    let again = format!("{stop}#[cfg(test)]\n#[path = \"hands.rs\"]\nmod again;\n");
+    let alias = "use crate::terminal::{route_read as feed};";
     for (planted, expected) in [
         (
             edit(h, report, ""),
@@ -4429,12 +4412,20 @@ fn sb3e_u20a_close_callers() {
             edit(h, &format!("{join} -> Option<T> {{\n"), &hooked),
             "(c): unlisted host/src/hands.rs|join|press",
         ),
+        // R214.3 D1: a `use` alias; D2: a `#[path]` test module hides no production file.
+        (
+            at(uses, alias),
+            "(c): unlisted host/src/hands.rs|-|route_read",
+        ),
+        (
+            planted(&receive, lib, stop, &again),
+            "(c): unlisted host/src/hands.rs|run|receive",
+        ),
     ] {
         let expected = format!("close callers {expected}");
         let found = close_caller_findings(&planted);
         shown(&mut misses, &expected, &found, &[&expected]);
     }
-    let (lib, stop) = ("host/src/lib.rs", "mod stop;\n");
     let lib = edit(lib, stop, &format!("{stop}#[cfg(test)]\nmod u20a_t;\n"));
     for (plant, planted) in [
         (
