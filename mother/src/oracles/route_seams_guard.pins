@@ -420,6 +420,7 @@ fn fire(point: &'static str, ctx: Ctx) {
 #[cfg(not(target_os = "linux"))]
 compile_error!("mother_route_seams: the route seams are Linux-only");
 
+use nexus_governed_control::host_session::{HostSession, SessionIdentity, SessionState};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::sync::{Mutex, MutexGuard, PoisonError};
@@ -430,7 +431,14 @@ const M: &str = "nexus-mother-route-seam-S7";
 /// The bounded wait of every pause (design 3.5).
 const PATIENCE: Duration = Duration::from_secs(10);
 /// Every point a harness may arm.
-pub(crate) const POINTS: [&str; 1] = ["host.read"];
+pub(crate) const POINTS: [&str; 6] = [
+    "host.close_report",
+    "host.close_report.inventory",
+    "host.close_report.model",
+    "host.close_report.resources",
+    "host.close_report.string",
+    "host.read",
+];
 
 static ARMED: AtomicBool = AtomicBool::new(false);
 static STATE: Mutex<State> = Mutex::new(State {
@@ -448,7 +456,8 @@ struct Pending {
     id: u64,
     point: &'static str,
     ack: SyncSender<Entry>,
-    pause: (Receiver<()>, &'static str, Timeout),
+    /// `None`: an armed panic.
+    pause: Option<(Receiver<()>, &'static str, Timeout)>,
 }
 
 /// Which arm of `read_input` processed the value.
@@ -460,14 +469,25 @@ pub enum Branch {
     Zero,
     /// A read error, after press and fail.
     Err,
+    /// U21a: a `close_report` point (no read).
+    Report,
 }
 
-/// What the reader knew when it recorded.
-#[derive(Clone, Copy)]
+/// What the recording host code knew: the reader's read, or (U21a) the
+/// close worker's session, its state, the report's stage, a branch's
+/// outcome and, at the exit, the report.
 pub(crate) struct Read {
     n: usize,
     eot: bool,
     branch: Branch,
+    report: Option<Report>,
+}
+struct Report {
+    session: SessionIdentity,
+    state: SessionState,
+    stage: String,
+    known: Option<bool>,
+    text: Option<String>,
 }
 /// `Ok(n)`: the read's length and whether it held a Ctrl-D.
 pub(crate) fn data(bytes: &[u8]) -> Read {
@@ -476,6 +496,7 @@ pub(crate) fn data(bytes: &[u8]) -> Read {
         n,
         eot,
         branch: Branch::Data,
+        report: None,
     }
 }
 /// `Ok(0)` or an error: nothing was read.
@@ -484,6 +505,30 @@ pub(crate) fn end(branch: Branch) -> Read {
         n: 0,
         eot: false,
         branch,
+        report: None,
+    }
+}
+/// U21a: a `close_report` point of `session`'s close worker: its state now,
+/// the report's `stage`, a branch's outcome (`Ok`: `Some(true)`) and, at the
+/// exit, the report text.
+pub(crate) fn report(
+    session: &HostSession,
+    stage: &str,
+    known: Option<bool>,
+    text: Option<&str>,
+) -> Read {
+    let report = Report {
+        session: session.identity(),
+        state: session.state(),
+        stage: stage.to_owned(),
+        known,
+        text: text.map(str::to_owned),
+    };
+    Read {
+        n: 0,
+        eot: false,
+        branch: Branch::Report,
+        report: Some(report),
     }
 }
 
@@ -495,7 +540,14 @@ pub struct Entry {
     pub n: usize,
     pub eot: bool,
     pub branch: Branch,
-    /// The recording thread: the reader's own.
+    /// U21a: a `close_report` point's session, state, stage, branch outcome
+    /// and (exit) report; `None` at `host.read`.
+    pub session: Option<SessionIdentity>,
+    pub state: Option<SessionState>,
+    pub stage: Option<String>,
+    pub known: Option<bool>,
+    pub text: Option<String>,
+    /// The recording thread: the reader's or the close worker's own.
     pub thread: std::thread::ThreadId,
     /// When it was recorded (position evidence only).
     pub instant: Instant,
@@ -515,6 +567,9 @@ pub enum Action {
         cell: &'static str,
         timeout: Timeout,
     },
+    /// U21a (SB3E-R140 Q3): at the first arrival, acknowledge, then begin
+    /// an unwind.
+    Panic,
 }
 
 /// One arming. Dropping it releases its pause, or disarms it if it has not
@@ -539,8 +594,12 @@ pub fn arm(point: &'static str, action: Action) -> Held {
     let mut s = state();
     s.tick += 1;
     let id = s.tick;
-    if let Action::Pause { cell, timeout } = action {
-        let pause = (released, cell, timeout);
+    let pause = match action {
+        Action::Trace => None,
+        Action::Pause { cell, timeout } => Some(Some((released, cell, timeout))),
+        Action::Panic => Some(None),
+    };
+    if let Some(pause) = pause {
         s.pending.push(Pending {
             id,
             point,
@@ -577,12 +636,18 @@ fn fire(point: &'static str, read: Read) {
     let (entry, pending) = {
         let mut s = state();
         s.tick += 1;
+        let report = read.report;
         let entry = Entry {
             tick: s.tick,
             point,
             n: read.n,
             eot: read.eot,
             branch: read.branch,
+            session: report.as_ref().map(|r| r.session),
+            state: report.as_ref().map(|r| r.state),
+            stage: report.as_ref().map(|r| r.stage.clone()),
+            known: report.as_ref().and_then(|r| r.known),
+            text: report.and_then(|r| r.text),
             thread: std::thread::current().id(),
             instant: Instant::now(),
         };
@@ -592,7 +657,9 @@ fn fire(point: &'static str, read: Read) {
     };
     let Some(pending) = pending else { return };
     let acknowledged = pending.ack.try_send(entry).is_ok();
-    let (released, cell, timeout) = pending.pause;
+    let Some((released, cell, timeout)) = pending.pause else {
+        panic!("route seam S7: armed panic at {point}");
+    };
     if !acknowledged || released.recv_timeout(PATIENCE).is_err() {
         timeout(&format!("TIMEOUT {cell} {point}"));
     }
@@ -956,7 +1023,7 @@ macro_rules! ctl {
 /// route, sink, dim, value and driver (`macro_rules!` cannot build
 /// `rc_<slug>`, so the arm writes it). An entry with no arm fails to compile.
 macro_rules! cells {
-    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_close_obligations, close_obligations lifecycle, s5_close::ctl_close_obligations); ctl!(ctl_delivery, delivery lifecycle, s5_close::ctl_delivery); ctl!(ctl_mother_end, mother_end lifecycle, s5_close::ctl_mother_end); ctl!(ctl_primary_end, primary_end lifecycle, s5_close::ctl_primary_end); ctl!(ctl_producer_join, producer_join lifecycle, s5_close::ctl_producer_join); ctl!(ctl_seal, seal lifecycle, s5_close::ctl_seal); ctl!(ctl_registration_record, registration_record ingress, s5_reg::ctl_registration_record); ctl!(ctl_close_restrict, close_restrict lifecycle, s5_r6::ctl_close_restrict); ctl!(ctl_emergency_restrict, emergency_restrict lifecycle, s5_r6::ctl_emergency_restrict); ctl!(ctl_registration_reserve, registration_reserve ingress, s5_reg::ctl_registration_reserve); ctl!(ctl_registration_readiness, registration_readiness ingress, s5_reg::ctl_registration_readiness); };
+    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_close_obligations, close_obligations lifecycle, s5_close::ctl_close_obligations); ctl!(ctl_delivery, delivery lifecycle, s5_close::ctl_delivery); ctl!(ctl_mother_end, mother_end lifecycle, s5_close::ctl_mother_end); ctl!(ctl_primary_end, primary_end lifecycle, s5_close::ctl_primary_end); ctl!(ctl_producer_join, producer_join lifecycle, s5_close::ctl_producer_join); ctl!(ctl_seal, seal lifecycle, s5_close::ctl_seal); ctl!(ctl_registration_record, registration_record ingress, s5_reg::ctl_registration_record); ctl!(ctl_close_restrict, close_restrict lifecycle, s5_r6::ctl_close_restrict); ctl!(ctl_emergency_restrict, emergency_restrict lifecycle, s5_r6::ctl_emergency_restrict); ctl!(ctl_registration_reserve, registration_reserve ingress, s5_reg::ctl_registration_reserve); ctl!(ctl_registration_readiness, registration_readiness ingress, s5_reg::ctl_registration_readiness); ctl!(ctl_close_report, close_report lifecycle, s5_report::ctl_close_report); };
     (r5 call_chat ingress original_cell_unscheduled; $($rest:tt)*) => { cell!(rc_r5_call_chat_ingress_original_cell_unscheduled, r5 call_chat ingress original_cell_unscheduled, s5::original_cell_unscheduled); cells! { $($rest)* } };
     (r5 call_chat ingress repeated; $($rest:tt)*) => { cell!(rc_r5_call_chat_ingress_repeated, r5 call_chat ingress repeated, s5::repeated); cells! { $($rest)* } };
     (r5 call_chat ingress mission_stop; $($rest:tt)*) => { cell!(rc_r5_call_chat_ingress_mission_stop, r5 call_chat ingress mission_stop, s5::mission_stop); cells! { $($rest)* } };
@@ -1029,6 +1096,11 @@ macro_rules! cells {
     (r0 registration_readiness ingress EOF; $($rest:tt)*) => { cell!(rc_r0_registration_readiness_ingress_eof, r0 registration_readiness ingress EOF, s5_reg::readiness_eof); cells! { $($rest)* } };
     (r0 registration_readiness ingress partial_Ctrl_D; $($rest:tt)*) => { cell!(rc_r0_registration_readiness_ingress_partial_ctrl_d, r0 registration_readiness ingress partial_Ctrl_D, s5_reg::readiness_partial_ctrl_d); cells! { $($rest)* } };
     (r0 registration_readiness ingress master_close; $($rest:tt)*) => { cell!(rc_r0_registration_readiness_ingress_master_close, r0 registration_readiness ingress master_close, s5_reg::readiness_master_close); cells! { $($rest)* } };
+    (r9 close_report lifecycle SealedFinalizing; $($rest:tt)*) => { cell!(rc_r9_close_report_lifecycle_sealedfinalizing, r9 close_report lifecycle SealedFinalizing, s5_report::sealedfinalizing); cells! { $($rest)* } };
+    (r9 close_report lifecycle ClosingRestricted; $($rest:tt)*) => { cell!(rc_r9_close_report_lifecycle_closingrestricted, r9 close_report lifecycle ClosingRestricted, s5_report::closingrestricted); cells! { $($rest)* } };
+    (r9 close_report fault none; $($rest:tt)*) => { cell!(rc_r9_close_report_fault_none, r9 close_report fault none, s5_report::fault_none); cells! { $($rest)* } };
+    (r9 close_report schedule before; $($rest:tt)*) => { cell!(rc_r9_close_report_schedule_before, r9 close_report schedule before, s5_report::schedule_before); cells! { $($rest)* } };
+    (r9 close_report schedule after; $($rest:tt)*) => { cell!(rc_r9_close_report_schedule_after, r9 close_report schedule after, s5_report::schedule_after); cells! { $($rest)* } };
 }
 @@@ host/tests/route_cells/s5.rs
 let credited = credit(&d, row, &broker, &trace);

@@ -83,7 +83,13 @@
    {"file": "mother/host/src/terminal.rs", "old": "#[cfg(mother_route_seams)]\nuse crate::route_seams;\n", "new": "use crate::route_seams;\n"},
    {"file": "mother/host/src/terminal.rs", "old": "                #[cfg(mother_route_seams)]\n                route_seams::at(\"host.read\", route_seams::end(route_seams::Branch::Zero));\n", "new": "                route_seams::at(\"host.read\", route_seams::end(route_seams::Branch::Zero));\n"},
    {"file": "mother/host/src/terminal.rs", "old": "                #[cfg(mother_route_seams)]\n                route_seams::at(\"host.read\", route_seams::data(&bytes[..n]));\n", "new": "                route_seams::at(\"host.read\", route_seams::data(&bytes[..n]));\n"},
-   {"file": "mother/host/src/terminal.rs", "old": "                #[cfg(mother_route_seams)]\n                route_seams::at(\"host.read\", route_seams::end(route_seams::Branch::Err));\n", "new": "                route_seams::at(\"host.read\", route_seams::end(route_seams::Branch::Err));\n"}
+   {"file": "mother/host/src/terminal.rs", "old": "                #[cfg(mother_route_seams)]\n                route_seams::at(\"host.read\", route_seams::end(route_seams::Branch::Err));\n", "new": "                route_seams::at(\"host.read\", route_seams::end(route_seams::Branch::Err));\n"},
+   {"file": "mother/host/src/hands.rs", "old": "#[cfg(mother_route_seams)]\nuse crate::route_seams;\n", "new": "use crate::route_seams;\n"},
+   {"file": "mother/host/src/hands.rs", "old": "        #[cfg(mother_route_seams)]\n        route_seams::at(\n            \"host.close_report\",\n", "new": "        route_seams::at(\n            \"host.close_report\",\n"},
+   {"file": "mother/host/src/hands.rs", "old": "        #[cfg(mother_route_seams)]\n        route_seams::at(\n            \"host.close_report.resources\",\n", "new": "        route_seams::at(\n            \"host.close_report.resources\",\n"},
+   {"file": "mother/host/src/hands.rs", "old": "        #[cfg(mother_route_seams)]\n        route_seams::at(\n            \"host.close_report.inventory\",\n", "new": "        route_seams::at(\n            \"host.close_report.inventory\",\n"},
+   {"file": "mother/host/src/hands.rs", "old": "        #[cfg(mother_route_seams)]\n        route_seams::at(\n            \"host.close_report.model\",\n", "new": "        route_seams::at(\n            \"host.close_report.model\",\n"},
+   {"file": "mother/host/src/hands.rs", "old": "        #[cfg(mother_route_seams)]\n        route_seams::at(\n            \"host.close_report.string\",\n", "new": "        route_seams::at(\n            \"host.close_report.string\",\n"}
   ]
  },
  "controls": [

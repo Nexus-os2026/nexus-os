@@ -1652,3 +1652,66 @@ and wait for GB4b (R46.3). Also disclosed: the CR/LF/CRLF `apply` column keeps
 and that terminator, as the drivers type it (a table pass is on the ledger); and
 `deadline_fired` now counts only the lapse notes `refused:1.expired`/`.judged`
 (`.cancelled` is never a lapse, host_session.rs:134-136), a witness rule for every cell.
+
+### 14.18 SB-3E U21a: close_report (SB3E-R197, R199)
+
+`Runtime::close_report` (`mother/host/src/hands.rs:757-819`) runs only on the
+`hands-close` worker. U21a adds its S7 hold point (entry, three bound branch records and
+the exit, all `#[cfg(mother_route_seams)]` whole statements) and credits the five set-B
+rows the Owner can cause from the terminal: R9 close_report lifecycle SealedFinalizing
+(Owner `quit`) and ClosingRestricted (`run`, `stop`, `quit`: the seal is refused), fault
+none, schedule before and schedule after (`quit`), each through production `hands::run`
+in its lane child on a pty the child owns (`route_cells/report.rs`, `s5_report.rs`).
+
+The production order the dispositions below rest on, all at this tree:
+
+| # | Fact | Citation |
+|---|---|---|
+| O1 | The reader is joined (`stop_reader`) before the worker can spawn; the spawn needs `reader_done` | `hands.rs:1390`, `:1401-1418`; `terminal.rs:1204-1217` |
+| O2 | The spawn needs `!ingress.failed()` and a Quit request | `hands.rs:1406-1408` |
+| O3 | `close` consumes the FileSession (`prepare_session_end(self)`) before close_report | `hands.rs:723-729`; `mother/src/coordinator/session_close.rs:56` |
+| O4 | On the Ok path and on every Err stage from `seal` on, authority has settled, revoking every grant, before close_report. Not on the three earlier stages: `mother_settlement` (`hands.rs:731`) and `resource_finalization` (`:735`) return before the settle (`:736-739`), and a failed settle (`authority_finalization`, `:739`) can return before the revoke loop (`governed.rs:551-553`) | `hands.rs:731-754`; `crates/nexus-governed-control/src/governed.rs:551-566` |
+| O5 | A revoke does not check an earlier one; expiry needs an unrevoked grant | `crates/nexus-governed-control/src/authority/policy.rs:396-409`, `:467-475` |
+| O6 | The host has no signal handler; Ctrl-C is a byte | `mother/host/src/` (no `signal`/`sigaction`) |
+
+One guard checks O1, O2 and the hold reasons below, and O4's order of text:
+`order_findings` in `mother/src/oracles/route_seams_guard.rs` (route sites test), with
+plants `u21a_p8`-`u21a_p12` (route_plants.json). It compares token positions only
+(no brace depth, no re-binding): the settle call precedes both `close_report` calls in
+`close`'s text, not that it ran on every path (O4 above). If it fails, every row below
+reopens as set B.
+
+**TR-1, unreachable by production order (table status `hold:unreachable_by_production_order`, never a credit).**
+
+| Row | Cell | Reason |
+|---|---|---|
+| x:222-224 | ingress CR, LF, CRLF | O1, O6: no byte can be read while close_report runs; `ack=read` cannot be produced |
+| x:232 | ingress budget | O3: the mission whose budget fires no longer exists; a `paused@` hold cannot last its 300 s inside the 3 s close (`close.rs:99-111`) |
+| x:233 | ingress grant_revocation | O4, O5, on the Ok path and the Err stages from `seal` on: the grant is already revoked; the value would add a record against the frozen `+0` or prove nothing. The three earlier stages are W3 (ledger below) |
+| x:234 | ingress grant_expiry | O4, O5, on the Ok path and the Err stages from `seal` on: at close_report the original grant reads revoked, not expired. The three earlier stages are W3 (ledger below) |
+
+**W1-type, no production caller at close_report (R199 Q-U21-4), each a static proof plus the guard above.**
+
+| Row | Value | Static proof |
+|---|---|---|
+| x:225 | original_cell_unscheduled | The door's halt view is reached only through the door, consumed by `SessionPort::new` (`hands.rs:236`); no Owner input reaches the session (O1, O6) |
+| x:226 | repeated | `emergency` comes only from the reader's Stop (O1, O6) |
+| x:227 | mission_stop | O3: no FileSession exists to stop |
+| x:228 | stop_all | O3 |
+| x:229 | door_fence | Its only production caller is the coordinator's stop path (`mother/src/coordinator.rs:1119`), consumed by O3; S8 is deferred |
+| x:230 | fatal | No production actor applies `fail` while close_report runs inside the worker's join: the reader, work and stop workers are joined (`hands.rs:1390-1398`) and the main thread waits in `join` until `producers_until`. Not a wider claim: the worker itself may call `fail` before close_report (`close.rs:355-356`, a failed settle), and after the join deadline the main thread can reach `Shared::fail` (`terminal.rs:252-253`) while a late worker is still in close_report |
+| x:231 | quit | O1: a second Quit cannot be read |
+
+**W3 by key (R202 S1), fault-only stages where O4 does not hold:** x:233 and x:234 at
+close_report stage `mother_settlement` (`hands.rs:731`), `resource_finalization` (`:735`)
+and `authority_finalization` (`:739`): the original grant may be unrevoked there. Step 0
+found no Owner path to these stages; they are not set B and are listed for U22's W3 report.
+
+**Ledger by key, not credited:** x:579 ClosingNormal and x:582 ClosedUnclean (a store
+fault driver in a `hands::run` child, W3); x:762 poison (a session handle amendment,
+W3); x:763 panic (W3; the S7 Panic action and its control
+`report::route_report_panic_unwinds_the_close_worker` land in U21a). Readiness is keyed
+on the File-mode Normal line (`hands.rs:1294-1295`) and the session's own S1 `reg.ready`
+with no `reg:word_compare` note (`s5.rs` `collect_report`; R202 C1), never the bare
+ready literal;
+model-mode equivalence for close_report is M-7's ledger item (R199 Q-U21-2).

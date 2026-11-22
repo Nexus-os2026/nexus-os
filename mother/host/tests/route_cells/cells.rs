@@ -4,7 +4,8 @@
 // (SB3E-R123.1), U6a-1's three R0 registration_record ingress cells
 // (SB3E-R120.1), U9b's five R6 held-sink lifecycle cells (SB3E-R135) and
 // SEAM-1's three registration_reserve and three registration_readiness
-// ingress cells and the R9 primary_end lifecycle cell (SB3E-R139). The
+// ingress cells and the R9 primary_end lifecycle cell (SB3E-R139), and
+// U21a's five R9 close_report cells (SB3E-R197, R199). The
 // route_cells lane compiles it through
 // `macro_rules! cells` in main.rs, whose terminal arm is the control
 // `ctl_call_chat`; session_model_bridge.rs and check-citations.py parse it
@@ -83,4 +84,9 @@ cells! {
     r0 registration_readiness ingress EOF;
     r0 registration_readiness ingress partial_Ctrl_D;
     r0 registration_readiness ingress master_close;
+    r9 close_report lifecycle SealedFinalizing;
+    r9 close_report lifecycle ClosingRestricted;
+    r9 close_report fault none;
+    r9 close_report schedule before;
+    r9 close_report schedule after;
 }

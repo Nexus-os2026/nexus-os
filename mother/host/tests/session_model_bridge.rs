@@ -306,7 +306,7 @@ delivery|sb3_mother_post_seal_model_events_are_absent
 /// the verifier compares them. It shows consistency, not that a test ran.
 const CELLS_RS: &str = include_str!("route_cells/cells.rs");
 const EXPECT: &str = include_str!("session/model-bridge-expect.tsv");
-const EXPECT_SHA256: &str = "7e9c34b5f4e77082ff4bae20071915188e572412153458d66b40fffdd4ac2398";
+const EXPECT_SHA256: &str = "9734c723e752aceeaf0fea63b44422a9037f172188a79ffb7658b907a438bbcf";
 const UNIVERSE_SHA256: &str = "a6a5337538a92d273dd2efdcaedcf76843bbf2f3ddc6be1f6f44f3c241985fd2";
 const EXPECT_HEADER: &str = "route\tsink\tdim\tvalues\tmech\tsetup\tdriver\tentry\tcheck\texit\texec\tapply\texpect\twitness\tcontrol\tplant\trefs\tstatus";
 /// R4: `reader:` is these literal bytes, or one of the three closed paths.
@@ -2090,8 +2090,8 @@ fn sb3d_r3_d1_cells_are_executed_or_owned() {
             count("open:F1"),
             count("open:M2e-D")
         ),
-        (117, 0, 593, 1, 33),
-        "after D2, U5b's six, U9a's eleven, U6a-1's three, U9b's five, SEAM-1's seven and U19a's 40 credited cells: {summary:?}"
+        (122, 0, 593, 1, 28),
+        "after D2, U5b's six, U9a's eleven, U6a-1's three, U9b's five, SEAM-1's seven, U19a's 40 and U21a's five credited cells: {summary:?}"
     );
     assert_eq!(
         count("cited"),
@@ -2107,7 +2107,9 @@ fn sb3d_r3_d1_cells_are_executed_or_owned() {
 /// lifecycle cells. SEAM-1 (SB3E-R139): the three registration_reserve and
 /// three registration_readiness ingress cells, and the R9 primary_end
 /// lifecycle cell (row 642). U19a (SB3E-R198): sixteen lifecycle and 24 byte cells.
-const CREDITED: [&str; 72] = [
+/// U21a (SB3E-R197, R199): the five set-B R9 close_report cells (rows 580,
+/// 581, 761, 868, 869).
+const CREDITED: [&str; 77] = [
     "r5/call_chat/ingress/original_cell_unscheduled",
     "r5/call_chat/ingress/repeated",
     "r5/call_chat/ingress/mission_stop",
@@ -2180,6 +2182,11 @@ const CREDITED: [&str; 72] = [
     "r0/registration_readiness/ingress/EOF",
     "r0/registration_readiness/ingress/partial_Ctrl_D",
     "r0/registration_readiness/ingress/master_close",
+    "r9/close_report/lifecycle/SealedFinalizing",
+    "r9/close_report/lifecycle/ClosingRestricted",
+    "r9/close_report/fault/none",
+    "r9/close_report/schedule/before",
+    "r9/close_report/schedule/after",
 ];
 /// U5b: `manifest` with the six credited entries first, for a control whose
 /// register keeps the real one's six `x:rc_` cells (each control's own
@@ -2825,7 +2832,9 @@ fn sb3e_expect_table_is_complete() {
             by_status["denial"],
             by_status["hold"]
         ),
-        (760, 25, 9, 111)
+        // U21a (SB3E-R197 TR-1): six close_report rows held, unreachable by
+        // production order (rows 222-224, 232-234).
+        (754, 25, 9, 117)
     );
 }
 /// Tampers with the checked-in table, through the verifier on the real files.

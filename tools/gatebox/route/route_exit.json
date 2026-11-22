@@ -14,6 +14,7 @@
   "names": [
    "cells::ctl_call_chat",
    "cells::ctl_close_obligations",
+   "cells::ctl_close_report",
    "cells::ctl_close_restrict",
    "cells::ctl_delivery",
    "cells::ctl_emergency_restrict",
@@ -89,6 +90,11 @@
    "cells::rc_r9_close_obligations_lifecycle_emergency",
    "cells::rc_r9_close_obligations_lifecycle_failed",
    "cells::rc_r9_close_obligations_lifecycle_normal",
+   "cells::rc_r9_close_report_fault_none",
+   "cells::rc_r9_close_report_lifecycle_closingrestricted",
+   "cells::rc_r9_close_report_lifecycle_sealedfinalizing",
+   "cells::rc_r9_close_report_schedule_after",
+   "cells::rc_r9_close_report_schedule_before",
    "cells::rc_r9_delivery_lifecycle_sealedfinalizing",
    "cells::rc_r9_mother_end_lifecycle_sealedfinalizing",
    "cells::rc_r9_primary_end_lifecycle_sealedfinalizing",
@@ -113,6 +119,9 @@
    "reader::route_reader_read_failure",
    "reader::route_reader_unarmed_records_nothing",
    "reader::route_s6_binds_the_stop_route",
+   "report::route_report_panic_unwinds_the_close_worker",
+   "report::route_report_unarmed_records_nothing",
+   "report::route_report_unreleased_hold_times_out_and_aborts",
    "route_armed_panic_begins_an_unwind",
    "route_armed_pause_acknowledges_blocks_and_releases",
    "route_at_cannot_return_into_the_route",
@@ -168,13 +177,13 @@
    "witness::witness_token_map_plants_each_fail",
    "witness::witness_wave_rows_render_from_recorded_identity"
   ],
-  "sha256": "5dd82e633455624a208a650a0b2bab6ca24df8c91f8579cdfcdfada48bd43144"
+  "sha256": "8e1d32fd101e84aad82c0728a6925523263c08b516d22e619f42be9d0dea127b"
  },
  "plants": {
-  "count": 381,
-  "names_sha256": "05767dad112bbb27a1f0990f799cd2a5c76a0071e786880deb5d9bdff56eb3f9",
+  "count": 393,
+  "names_sha256": "88301d26aa11ee40fb9e5d05ac6574f9967bdae61b696e998621e1d140aea81c",
   "without_expect_sha256": "7d0ab87de1767d50461282e38349a037a95a66a2a389dd9e4075bc61bf35940d",
   "without_expect_count": 2,
-  "file_sha256": "739e6070dc3c0ce1b0a3a05b6332c8c74a51419208d36947dbea684e0f2c0ae9"
+  "file_sha256": "b6df17ba6bfd57c5651fa196cd91994b783c84a581698551c3542fdc553eb02a"
  }
 }
