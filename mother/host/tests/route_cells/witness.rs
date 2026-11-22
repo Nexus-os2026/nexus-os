@@ -10,6 +10,7 @@ use super::s5::{Ack, Facts, Ran};
 use nexus_governed_control::broker::route_seams as s1;
 use nexus_mother::journal::Event;
 use nexus_mother::lane::LaneRole;
+use nexus_mother::state::Trigger;
 
 /// The frozen expectation table: the one reviewed `include_str!` row.
 const TABLE: &str = include_str!("../session/model-bridge-expect.tsv");
@@ -42,7 +43,7 @@ const KEYS: [&str; 7] = ["s", "q", "run", "inv", "att", "kind", "ord"];
 type Tag<'t> = (Option<&'t str>, Option<u64>);
 type Predicate = for<'a> fn(&View<'a>, &str, Tag) -> Option<Seen<'a>>;
 type Token = (&'static str, &'static str, Predicate);
-const TOKENS: [Token; 23] = [
+const TOKENS: [Token; 27] = [
     // model.call.observed, then on its thread exactly the note
     // refused:8.cas, with no model.call.admitted of the row's ord.
     ("CAS:m:774", "model.call.observed", |v, _, tag| {
@@ -93,7 +94,28 @@ const TOKENS: [Token; 23] = [
     ("note:admission", "reg.admission", after_ack),
     ("CAS:m:238", "model.gate.checked", acked),
     ("note:cas", "reg:cas", after_ack),
+    // U19c (SB3E-R228): the acknowledged `identity` (model.rs:619) and, after
+    // it on its thread, the live refusal's note (model.rs:623); the
+    // acknowledged bind check (run.rs:2330) and, after it on its thread, the
+    // CAS refusal's note with no later `bind.done` of its run (S1). F4,
+    // option C: `note:cas@r:2301` is keyed by the whole branch text, so it is
+    // not U19b-1's `note:cas`.
+    ("m:571", "identity", acked),
+    ("note:scope_live", "identity:scope_live", after_ack),
+    ("CAS:r:2301", "model.bind.checked", acked),
+    ("note:cas@r:2301", "bind:cas", bind_refused),
 ];
+/// U19c (SB3E-R228 S1): the CAS note after the acknowledgement on its thread
+/// (`after_ack`), and no `bind.done` of its run after it there: the refusal
+/// returned (run.rs:2332-2337, before :2346), as `cas` binds no admission.
+fn bind_refused<'a>(v: &View<'a>, point: &str, tag: Tag) -> Option<Seen<'a>> {
+    let n = after_ack(v, point, tag)?;
+    let done = |e: &&Seen| {
+        e.s1 && !e.note && e.point == "bind.done" && e.run == n.run && e.thread == n.thread
+    };
+    let after = |e: &&Seen| done(e) && e.tick > n.tick;
+    (!v.seen.iter().any(|e| after(&e))).then_some(n)
+}
 /// U19b-1: the admitted entry or note at `point` after the cell's last
 /// acknowledgement, on that acknowledgement's thread (the first such).
 fn after_ack<'a>(v: &View<'a>, point: &str, tag: Tag) -> Option<Seen<'a>> {
@@ -177,7 +199,7 @@ fn after_acked<'a>(v: &View<'a>, point: &str, tag: Tag) -> Option<Seen<'a>> {
 /// captured the sources (s5.rs `start`'s `since`), or for `collect_close` and
 /// `registered` since the hold's acknowledgement (U9a M3, SEAM-1; SB3E-R6.3's
 /// empty delta is `+0:all[s=S]`).
-const LEDGER: [(&str, &str); 8] = [
+const LEDGER: [(&str, &str); 10] = [
     ("ModelCallCharged", "journal"),
     ("LaneReturned", "journal"),
     ("SessionClosed", "journal"),
@@ -185,6 +207,10 @@ const LEDGER: [(&str, &str); 8] = [
     ("model_registered", "native"),
     // U19a TR-1 (SB3E-R198): the Stop record of the reader's bound Stop route.
     ("emergency_stop", "native"),
+    // U19c (SB3E-R228 F5): the mission's end (a Stop, Block or Fail
+    // transition) and the run's cancellation record.
+    ("MissionEnd", "journal"),
+    ("run_cancelled", "native"),
     ("session_closed", "commit"),
     ("all", "all"),
 ];
@@ -232,6 +258,12 @@ host.close_report.resources|s|host hands.rs close_report resources branch; route
 host.close_report.inventory|s|host hands.rs close_report inventory branch; route_seams.rs report
 host.close_report.model|s|host hands.rs close_report model branch; route_seams.rs report
 host.close_report.string|s|host hands.rs close_report exit; route_seams.rs report
+identity|s q|host_session/model.rs:619; host_session.rs:89-91
+identity:scope_live|s q|host_session/model.rs:623; host_session.rs:89-91
+bind.entry|s q run|host_session/model.rs:565; host_session.rs:89-91
+model.bind.checked|run|authority/run.rs:2330
+bind.done|run|authority/run.rs:2346
+bind:cas|run|authority/run.rs:2335
 ";
 /// W0b A1b, A4: `key|points|carrier|source`: the only bindings of a tagged
 /// key a point does not record, each through the observed entry `carrier`
@@ -248,6 +280,7 @@ att|mother.charge.entry mother.settle|sites|credit's claim on the Builder's atte
 s|native journal|fixture|the cell's own projection and journal in its window (s5.rs collect: since start; collect_close, registered: since the hold; kept, B1')
 s|commit|primary|the end record's S1 commit on the acknowledged close.primary's thread, after it (close.rs:524, 538; evidence_store.rs:1382-1383)
 q|native|bracket:model.record.before,model.install.before|the registration's own entries of S and Q either side of its record (host_session/model.rs:301-314)
+s|model.bind.checked bind.done bind:cas|bindentry|U19c (SB3E-R228): a bind.entry of S and Q earlier on the entry's thread, of its run (host_session/model.rs:565)
 ";
 /// The carriers a `CORRELATIONS` row may name, a closed list.
 fn carried(name: &str, v: &View, e: Option<&Seen>) -> bool {
@@ -261,6 +294,7 @@ fn carried(name: &str, v: &View, e: Option<&Seen>) -> bool {
         "claim" => v.b.att.is_some() && run.is_some() && run == v.b.run,
         "sites" => builder && v.b.att.is_some(),
         "fixture" => true,
+        "bindentry" => e.is_some_and(|e| bind_entry(v, e)),
         "primary" => acked(v, "close.primary", (None, None)).is_some(),
         _ => name
             .strip_prefix("bracket:")
@@ -425,6 +459,13 @@ fn bound(v: &View, e: Option<&Seen>, point: &str, k: &str) -> bool {
     let carries = |r: &Vec<&str>| r[0] == k && r[1].split(' ').any(|p| p == point);
     rows.filter(carries).any(|r| carried(r[2], v, e))
 }
+/// U19c: an admitted `bind.entry` of S and Q earlier on `e`'s thread, of its run.
+fn bind_entry(v: &View, e: &Seen) -> bool {
+    let at = |b: &&Seen| b.s1 && !b.note && b.point == "bind.entry" && admitted(v, b, (None, None));
+    let ours =
+        |b: &&Seen| b.run.is_some() && b.run == e.run && b.thread == e.thread && b.tick < e.tick;
+    v.seen.iter().filter(at).any(|b| ours(&b))
+}
 /// The Builder's S5 entry at `point` of S and Q (its invocation).
 fn builders(v: &View, point: &str) -> bool {
     let at = |m: &&Seen| !m.s1 && m.point == point && m.inv.is_some();
@@ -452,7 +493,7 @@ fn brackets(v: &View, points: &str) -> bool {
 }
 /// Behaviour 10: the controls' witnesses, by `(sink, dim)`, as measured at U5
 /// Step 0 (R86).
-const CONTROLS: [(&str, &str, &str); 21] = [
+const CONTROLS: [(&str, &str, &str); 23] = [
     ("call_chat", "ingress", CONTROL),
     ("close_obligations", "lifecycle", CLOSE_CONTROLS[0]),
     ("delivery", "lifecycle", CLOSE_CONTROLS[1]),
@@ -474,6 +515,17 @@ const CONTROLS: [(&str, &str, &str); 21] = [
     ("call_version", "ingress", CALL_CONTROLS[0]),
     ("call_status", "ingress", CALL_CONTROLS[1]),
     ("call_tags", "ingress", CALL_CONTROLS[2]),
+    ("identity_view", "ingress", PRE_CONTROLS[0]),
+    ("inference_binding", "ingress", PRE_CONTROLS[1]),
+];
+/// U19c (SB3E-R228): each sink held at its first arrival and released: it
+/// passes, with no refusal note (`branch=none`).
+const PRE_CONTROLS: [&str; 2] = [
+    "entry=identity[s=S q=Q];check=m:571[s=S q=Q];value=none@identity ack=held won=route;\
+out=passed@m:571;branch=none;ledger=+5:all[s=S];window=boundary;deadline_fired=none",
+    "entry=bind.entry[s=S run=RUN];check=CAS:r:2301[s=S run=RUN];\
+value=none@model.bind.checked ack=held won=route;out=passed@CAS:r:2301;branch=none;\
+ledger=+4:all[s=S];window=boundary;deadline_fired=none",
 ];
 /// U19b-2 (SB3E-R217): the call controls, each held at its own ord of
 /// `model.call.observed` and released: the call completes (`charge_append=1`).
@@ -810,9 +862,12 @@ fn rendered(f: &Facts, shape: &Shape, t: &Tables) -> String {
     // The branch note: its token's predicate held, or what was noted.
     let branch_text = text("branch");
     let note_token = branch_text.split('@').next().unwrap_or("");
+    // U19c F4 (option C): a token keyed by the whole branch text comes first.
+    let whole = v.t.tokens.iter().any(|t| t.0 == branch_text);
+    let keyed = if whole { branch_text } else { note_token };
     let note = note_token
         .starts_with("note:")
-        .then(|| token(v, note_token, tag))
+        .then(|| token(v, keyed, tag))
         .flatten();
     let observed = |shown: String| match (entry.is_some(), stray.is_empty()) {
         (false, _) => Err(Unbound),
@@ -979,6 +1034,9 @@ fn ledger(v: &View, text: &str) -> Obs {
             Event::ModelCallCharged { invocation, .. } => ("ModelCallCharged", Some(invocation)),
             Event::LaneReturned { invocation, .. } => ("LaneReturned", Some(invocation)),
             Event::SessionClosed => ("SessionClosed", None),
+            Event::Transition {
+                trigger: Trigger::Stop { .. } | Trigger::Block { .. } | Trigger::Fail { .. },
+            } => ("MissionEnd", None),
             _ => ("", None),
         };
         let by_inv = |e: &&nexus_mother::journal::Entry| {
@@ -989,7 +1047,7 @@ fn ledger(v: &View, text: &str) -> Obs {
             r.phase.as_str() == event && (event != "model_call" || attempt(v, r))
         };
         let Some(source) = LEDGER.iter().find(|l| l.0 == event).map(|l| l.1) else {
-            return Ok(format!("unlisted:{event}"));
+            return Ok((format!("unlisted:{event}"), 0, false));
         };
         let carried: &[&str] = match event {
             "ModelCallCharged" | "LaneReturned" => &["inv"],
@@ -1042,15 +1100,24 @@ fn ledger(v: &View, text: &str) -> Obs {
             "commit" => commits(true),
             _ => v.f.journal.len() + v.f.native.len() + host_commits(v),
         };
-        // U19a TR-1 (SB3E-R202 S1): the Stop record stands for the whole window, as `+0:all` did.
-        let whole = v.f.journal.len() + v.f.native.len();
-        if event == "emergency_stop" && n != whole {
-            return Ok(format!("+{n}:{event}[{tag}] of {whole}"));
-        }
-        Ok(format!("+{n}:{event}[{tag}]"))
+        let windowed = WINDOWED.contains(&event);
+        Ok((format!("+{n}:{event}[{tag}]"), n, windowed))
     });
-    Ok(shown.collect::<Result<Vec<_>, _>>()?.join(","))
+    let shown = shown.collect::<Result<Vec<_>, _>>()?;
+    // U19a TR-1 (SB3E-R202 S1), U19c (R228 F5): the Stop, end and cancel
+    // records stand for the whole window, as `+0:all` did: their counts must
+    // sum to the window (journal and native), else ` of <whole>` is shown.
+    let whole = v.f.journal.len() + v.f.native.len();
+    let sum: usize = shown.iter().map(|s| s.1).sum();
+    let windowed = shown.iter().any(|s| s.2) && sum != whole;
+    let mut items: Vec<String> = shown.into_iter().map(|s| s.0).collect();
+    if let (true, Some(last)) = (windowed, items.last_mut()) {
+        last.push_str(&format!(" of {whole}"));
+    }
+    Ok(items.join(","))
 }
+/// The ledger events counted against the whole window (U19a, U19c).
+const WINDOWED: [&str; 3] = ["emergency_stop", "MissionEnd", "run_cancelled"];
 /// U21a: a `close_report` cell's primary records in its window, with no
 /// projection in a `hands::run` child: its S1 commits after its S7
 /// acknowledgement (0 for every other cell).

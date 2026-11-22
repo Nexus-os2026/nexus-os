@@ -3414,3 +3414,311 @@ fn call_drive(
     }
     facts
 }
+
+// U19c (SB3E-R228; Step 0 report §1-§5): identity_view and inference_binding
+// refused while held, harness composition until M-5b (F1: every shipped lane
+// has model cap 0, hands.rs:172-187, lane.rs:146-148). identity_view is held
+// at the advance's first `identity` (coordinator.rs:1866, model.rs:619),
+// inference_binding at its first `model.bind.checked` (coordinator.rs:1915,
+// run.rs:2330); neither refused path reaches the Builder's lane or a call.
+/// Each sink's held point and its entry point (T6).
+const PRE_POINTS: [(&str, &[&str], &str); 2] = [
+    ("identity_view", &["identity"], "identity"),
+    ("inference_binding", &["model.bind.checked"], "bind.entry"),
+];
+/// F2: the two refusal notes (model.rs:623, run.rs:2335).
+const PRE_NOTES: [&str; 2] = ["identity:scope_live", "bind:cas"];
+/// U19c: the row's value applied while its sink is held, collected by
+/// `collect_pre`. C1 (R194): the advance's last step and the mission's end
+/// are `want`'s; the control `none` is released and must write no note.
+pub(super) fn identified(
+    f: &Fixture,
+    row: (&'static str, &'static str),
+    value: &'static str,
+    want: (&str, &str),
+) -> Facts {
+    pre_drive(f, row, (value, None), want)
+}
+/// U19c: `identified` with the reader value `typed` typed while held.
+pub(super) fn read_identified(
+    f: &Fixture,
+    row: (&'static str, &'static str),
+    (value, typed): (&'static str, &'static str),
+    want: (&str, &str),
+) -> Facts {
+    pre_drive(f, row, (value, Some(typed)), want)
+}
+fn pre_drive(
+    f: &Fixture,
+    row: (&'static str, &'static str),
+    (value, typed): (&'static str, Option<&'static str>),
+    want: (&str, &str),
+) -> Facts {
+    let points = PRE_POINTS.iter().find(|p| p.0 == row.0).map(|p| p.1);
+    let points = points.unwrap_or_else(|| panic!("identified: {} has no point", row.0));
+    let chain = Chain {
+        row,
+        anchor: Anchor::Arrival(1),
+        points,
+    };
+    let c = start(f);
+    let (acks, steps, (worker, findings)) = chained(f, &c.mother, &chain, |held, worker| {
+        reopen(); // M6: the window opens at the hold's acknowledgement.
+        let findings = pre_apply(&c.o, held, (value, typed));
+        if value != "none" {
+            *APPLIED.lock().unwrap() = Some(Instant::now());
+        }
+        (worker, findings)
+    });
+    let mut facts = collect_pre(&c.o, (chain.anchor_point(), acks), (row, value), findings);
+    let ack = match facts.acks.first() {
+        Some(Ack::S1(e)) => Some(e.clone()),
+        _ => None,
+    };
+    if let Err(e) = pre_ack(ack.as_ref(), &facts, worker) {
+        later(&mut facts, e);
+    }
+    // C1 (R194): the advance's last step, and the mission's end in the window.
+    let last = steps.last().map_or("none", String::as_str);
+    let end = mission_end(&facts.journal);
+    if (last, end.as_str()) != want {
+        let (a, b) = want;
+        let c1 = format!("identified: the advance ended {last}, the mission {end}, not {a}, {b}");
+        later(&mut facts, c1);
+    }
+    let s = facts.session;
+    let noted = |e: &&s1::Entry| e.note && PRE_NOTES.contains(&e.point);
+    if value == "none" && facts.broker.iter().any(|e| noted(&e)) {
+        later(
+            &mut facts,
+            "identified: a refusal note on the admitted path".into(),
+        );
+    }
+    let pressed = |e: &&s1::Entry| e.point == "ingress.emergency" && e.session == Some(s);
+    let presses = facts.broker.iter().filter(pressed).count();
+    if value == "repeated" && presses != 2 {
+        later(
+            &mut facts,
+            format!("identified: {presses} ingress.emergency entries"),
+        );
+    }
+    facts
+}
+/// U19c: the value while held (typed through production's reader, or
+/// applied with its state read while held, R202 S2), then the release.
+fn pre_apply(
+    o: &Opened,
+    held: Hold,
+    (value, typed): (&'static str, Option<&'static str>),
+) -> Vec<String> {
+    if let Some(typed) = typed {
+        let reading = Reading::open(o);
+        let barriers = reading.typed(typed);
+        drop(held);
+        return reading.close(typed, barriers);
+    }
+    let (want, results) = match value {
+        "repeated" => ("Emergency", vec![pressed(o), pressed(o)]),
+        "quit" | "ClosingNormal" => ("ClosingNormal", vec![quit_two(o)]),
+        "Failed" => {
+            o.ingress.fail();
+            ("Failed", Vec::new())
+        }
+        "none" => return Vec::new(),
+        _ => return vec![format!("identified: no applier for {value}")],
+    };
+    let state = format!("{:?}", o.session.state());
+    drop(held);
+    match results.iter().all(Result::is_ok) && state == want {
+        true => Vec::new(),
+        false => vec![format!(
+            "identified: {value} {results:?}, state {state}, not {want}"
+        )],
+    }
+}
+/// M9: the hold is acknowledged at the row's point on the advancing worker,
+/// never the reader's or the harness's thread: of S and Q at `identity`, of
+/// RUN at `model.bind.checked` (which records no session, run.rs:2330).
+fn pre_ack(ack: Option<&s1::Entry>, f: &Facts, worker: ThreadId) -> Result<(), String> {
+    let run = f.claim.map(|c| c.0);
+    let bound = |a: &s1::Entry| match a.point {
+        "identity" => (a.session, a.request) == (Some(f.session), Some(f.request)),
+        "model.bind.checked" => run.is_some() && a.run == run,
+        _ => false,
+    };
+    let ours = |a: &&s1::Entry| bound(a) && !a.note && a.thread == worker;
+    match ack.filter(ours) {
+        Some(_) => Ok(()),
+        None => Err(format!(
+            "identified: acknowledgement {:?}, the advancing worker {worker:?}",
+            ack.map(|a| (a.point, a.thread))
+        )),
+    }
+}
+/// C1: the mission's end, the window's last Stop, Block or Fail transition.
+fn mission_end(journal: &[Journaled]) -> String {
+    use nexus_mother::journal::Event;
+    use nexus_mother::state::Trigger;
+    let end = journal.iter().rev().find_map(|e| match &e.event {
+        Event::Transition { trigger } => match trigger {
+            Trigger::Stop { .. } | Trigger::Block { .. } | Trigger::Fail { .. } => Some(trigger),
+            _ => None,
+        },
+        _ => None,
+    });
+    end.map_or("none".into(), |t| format!("{t:?}"))
+}
+/// F5: the settle barrier. The advance has returned (`chained` joined it);
+/// a bound Stop route's workers must have finished (no stop event pending or
+/// in flight), bounded by `PATIENCE`.
+fn settled(o: &Opened) -> Result<(), String> {
+    use nexus_governed_control::host_session::stop::StopPhase;
+    let deadline = Instant::now() + PATIENCE;
+    loop {
+        let events = o
+            .session
+            .stop_events()
+            .map_err(|e| format!("settle: {e:?}"))?;
+        let open = |p: &StopPhase| matches!(p, StopPhase::Pending | StopPhase::InFlight);
+        if !events.iter().any(|e| open(&e.phase)) {
+            return Ok(());
+        }
+        if Instant::now() >= deadline {
+            return Err(format!("settle: stop events {events:?}"));
+        }
+        std::thread::sleep(Duration::from_millis(2));
+    }
+}
+/// M4-M6, F5 (SB3E-R228): the passive collection of a held identity or bind
+/// cell, after the settle barrier: both traces; the no-call profile (no
+/// counted call, attempt site, opening or binding entry, `credit_close`'s,
+/// and no Builder lane; the control passes to its one call); T6 at the
+/// row's entry point; RUN from the session's own native `run_opened` (never
+/// the observed entry; ATT is never bound); journal, projection and peer
+/// since the hold's acknowledgement (`reopen`).
+fn collect_pre(
+    o: &Opened,
+    (points, acks): (Vec<&'static str>, Vec<Ack>),
+    (cell, value): ((&'static str, &'static str), &'static str),
+    mut findings: Vec<String>,
+) -> Facts {
+    if READ.lock().unwrap().is_some() {
+        findings.extend(settled(o).err());
+    }
+    let (broker, mother) = (s1::drain_trace(), s5::drain_trace());
+    let s = SOURCES.lock().unwrap().take();
+    let s = s.expect("collect_pre: no observation");
+    let (session, request, calls, recorded) = &s.driver;
+    let calls = calls.load(Ordering::SeqCst);
+    let recorded = recorded.lock().unwrap().clone();
+    let builder = recorded.iter().any(|r| r.0 == LaneRole::Builder);
+    let profile = match value {
+        "none" => (calls != 1).then_some("driver_calls"),
+        _ => credit_close(calls, *session, &broker, &mother)
+            .err()
+            .or(builder.then_some("builder")),
+    };
+    let foreign = mother.iter().any(|m| m.request != Some(*request));
+    if let Some(reason) = profile.or(foreign.then_some("request")) {
+        findings.push(format!("credit: {reason}"));
+    }
+    let entered = PRE_POINTS
+        .iter()
+        .find(|p| p.0 == cell.0)
+        .map_or("", |p| p.2);
+    let seams = t6_close(cfg!(mother_route_seams), *session, entered, &broker);
+    findings.extend(seams.err().map(|r| format!("T6 pre: {r}")));
+    let running = *RUNNING.lock().unwrap();
+    if s.cell != running {
+        findings.push(format!(
+            "collect_pre: observed for {}, not {running}",
+            s.cell
+        ));
+    }
+    let records = s.native.records();
+    let opened: Vec<&str> = records
+        .iter()
+        .filter(|r| r.phase.as_str() == "run_opened")
+        .filter_map(|r| r.run.as_deref())
+        .collect();
+    let run = match opened[..] {
+        [one] => RunId::parse(one),
+        _ => None,
+    };
+    let journal = journal_at(&s.journal).map(|mut j| j.split_off(s.since.0.min(j.len())));
+    let journal = journal.unwrap_or_else(|e| {
+        findings.push(e);
+        Vec::new()
+    });
+    let peer = s.peer.lock().unwrap()[s.since.2..].to_vec();
+    let native = records.get(s.since.1..).unwrap_or_default().to_vec();
+    let events: Vec<String> = journal.iter().map(|e| format!("{:?}", e.event)).collect();
+    let phases: Vec<&str> = native.iter().map(|r| r.phase.as_str()).collect();
+    println!("WITNESS pre window: journal {events:?}, native {phases:?}, run {run:?}");
+    let facts = Facts {
+        session: *session,
+        request: *request,
+        recorded,
+        claim: run.map(|r| (r, u32::MAX)),
+        points,
+        acks,
+        value,
+        row: cell,
+        applied: APPLIED.lock().unwrap().take(),
+        broker,
+        mother,
+        host: Vec::new(),
+        journal,
+        native,
+        peer,
+        findings,
+        read: READ.lock().unwrap().take(),
+    };
+    KEPT.lock().unwrap().push(("collect_pre", facts.clone()));
+    facts
+}
+/// M9 (rule level, over a real typed bind run): the acknowledgement rule
+/// admits the advancing worker's and refuses one on the reader's or the
+/// harness's thread, of another run, or none.
+#[test]
+fn route_s5_pre_ack_binds_the_advancing_worker() {
+    child("s5::route_s5_pre_ack_binds_the_advancing_worker", |f| {
+        let row = ("inference_binding", "ingress");
+        let want = ("Err(Stopped)", "Stop { reason: EmergencyStop }");
+        let facts = read_identified(f, row, ("CR", "stop0d"), want);
+        assert!(facts.findings.is_empty(), "{:?}", facts.findings);
+        let Some(Ack::S1(ack)) = facts.acks.first() else {
+            panic!("no acknowledgement")
+        };
+        let read = facts
+            .read
+            .as_ref()
+            .map(|r| &r.trace[..])
+            .unwrap_or_default();
+        let reader = read
+            .iter()
+            .find(|e| e.point == "host.read")
+            .expect("a read");
+        assert_eq!(pre_ack(Some(ack), &facts, ack.thread), Ok(()));
+        let on = |thread| s1::Entry {
+            thread,
+            ..ack.clone()
+        };
+        let mut other = facts.clone();
+        other.claim = RunId::parse(&format!("run-{}", "0".repeat(32))).map(|r| (r, 0));
+        for (refused, what) in [
+            (
+                pre_ack(Some(&on(reader.thread)), &facts, ack.thread),
+                "the reader's",
+            ),
+            (
+                pre_ack(Some(&on(std::thread::current().id())), &facts, ack.thread),
+                "the harness's",
+            ),
+            (pre_ack(Some(ack), &other, ack.thread), "another run"),
+            (pre_ack(None, &facts, ack.thread), "no acknowledgement"),
+        ] {
+            assert!(refused.is_err(), "{what} not refused");
+        }
+    });
+}

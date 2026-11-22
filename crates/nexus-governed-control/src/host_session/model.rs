@@ -618,6 +618,9 @@ impl SessionDoor {
         #[cfg(mother_route_seams)]
         route_seams::at("identity", self.context.scope.route_ctx());
         if !self.context.scope.live(self.core.cell.session_word()) {
+            // U19c (SB3E-R228 F2): the live refusal's own route note.
+            #[cfg(mother_route_seams)]
+            route_seams::note("identity:scope_live", self.context.scope.route_ctx());
             return None;
         }
         // Installed M, observed without waiting (poison latches, as elsewhere).

@@ -1476,7 +1476,7 @@ Result<(),SessionError>{>implAttempt{ at(complete,self.route_ctx());¦ionError>{
 ty:[u8;32],)->Result<(),crate::authority::AuthorityError>{>implSessionDoor{ at(bind.entry,self.\
 context.scope.route_ctx().run(run));¦Halted);};¦if!self.co >pub(super)fnmodel_identity_private(\
 &self)->Option<ModelIdentityView>{>implSessionDoor{ at(identity,self.context.scope.route_ctx())\
-;¦urnNone;};¦if!self.co >fnpredicates(&self,kind:RequestKind)->Result<(),Refusal>{>implCallGate\
+;¦urnNone;};¦if!self.co +if!self.context.scope.live(self.core.cell.session_word()){ note(identity:scope_live,self.context.scope.route_ctx());¦n_word()){¦returnNone >fnpredicates(&self,kind:RequestKind)->Result<(),Refusal>{>implCallGate\
 <'_>{ at(model.call.sampled,self.route_ctx(kind));¦e.cell),);¦letruns=se +lethold=runs.try_requ\
 est_hold().map_err(|poisoned|{ note(refused:hold,self.route_ctx(kind));¦t.fail();}¦(,Cancelle +\
 ifexpired{ note(refused:1.expired,self.route_ctx(kind));¦ifexpired{¦returnErr( +ifjudged==Err(c\
@@ -1549,7 +1549,7 @@ nsettle_session_attempt(&self,ticket:SessionAttempt,deadline:Instant,)->Result<(
 r>{>implRunRegistry{ at(model.settle.before,Ctx::default().run(ticket.run).attempt(ticket.ordin\
 al),);¦t.cell),);¦letmuttabl >pub(crate)fnadmit_session_inference(&self,b:SessionBinding<'_>,)-\
 >Result<(),AuthorityError>{>implRunRegistry{ at(model.bind.checked,Ctx::default().run(b.run));¦\
-iginal),);¦b.original at(bind.done,Ctx::default().run(b.run));¦mission);}¦Ok(())}}#[
+iginal),);¦b.original +b.original.admit().map_err(|e|{ note(bind:cas,Ctx::default().run(b.run));¦p_err(|e|{¦e})?;iffre = at(bind.done,Ctx::default().run(b.run));¦mission);}¦Ok(())}}#[
 evidence_store.rs: >fnappend(&mutself,phase:&str,commitment:Option<&str>,body:&str)->Append{>im\
 plInner{ +#[cfg(mother_route_seams)]ifself.route_refused(kind,phase,commitment){ note(store.ref\
 used,Ctx::store(kind,phase,commitment));¦mmitment){¦ifrolled_b = at(store.commit,Ctx::store(kin\
