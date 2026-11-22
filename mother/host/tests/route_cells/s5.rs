@@ -2861,7 +2861,7 @@ fn sink_result<T, E: std::fmt::Debug>(
 }
 /// U19a (U18 B4-B6, SB3E-R106.3): production's reader composed here, over the
 /// cell's ingress, as hands.rs composes it: the pty, `Terminal::open`, then
-/// the Stop route bound to the session (hands.rs:1092, 1130; S6).
+/// the Stop route bound to the session (hands.rs:1119, 1157; S6).
 struct Reading {
     terminal: Terminal,
     tty: reader::Tty,
@@ -3326,7 +3326,7 @@ pub(super) fn collect_report(
 
 // U19b-2 (SB3E-R216 F1, F6; R217): the R5 call rows refused at ords 1-3,
 // harness composition until M-5b (F1: production makes no model call,
-// hands.rs:1312-1323). A call's ords 1-3 are `check_runtime`'s metadata
+// hands.rs:1339-1350). A call's ords 1-3 are `check_runtime`'s metadata
 // requests (ollama.rs:137, 249, 265, 285), before its charge (:138).
 const CALL_ORDS: [(&str, usize); 3] = [("call_version", 1), ("call_status", 2), ("call_tags", 3)];
 /// F6: a call refused at ord `n` < 4: `REFUSED`'s path with `n` gates and no

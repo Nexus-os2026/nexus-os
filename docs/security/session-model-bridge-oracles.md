@@ -1770,7 +1770,7 @@ renders `ack=unread[..]` for every byte row; the bare-terminator plants are
 
 ### 14.20 SB-3E U19b-1: registration install and metadata gates (SB3E-R216, R216.1)
 
-**Credited (44, set B; real reader composed as hands.rs:1092, :1130 compose it; the
+**Credited (44, set B; real reader composed as hands.rs:1119, :1157 compose it; the
 registration worker stands for `hands-startup`, hands.rs:1114-1180).**
 
 | Rows | Sink | Value | How |
@@ -1822,31 +1822,32 @@ if the kernel's metadata sequence (ollama.rs:103-104, :249-314) ever becomes dyn
 
 **Rule for later call rows (R216 F1).** The R5 call rows (U19a's x:86-91 and 534-537, and
 U19b-2's) are credited as harness-composition evidence: production makes no model call before
-M-5b (hands.rs:1312-1323). Binding on M-5b: a production-order guard (the page call runs on a
+M-5b (hands.rs:1339-1350). Binding on M-5b: a production-order guard (the page call runs on a
 worker or exchange thread, never the reader; the reader stays live until after the work join,
-hands.rs:1363-1364; Stop is bound before the run, hands.rs:1130), a re-run of every call row on
+hands.rs:1390-1391; Stop is bound before the run, hands.rs:1157), a re-run of every call row on
 M-5b's composition, and U22's set-B check re-run after M-5b and before O-4.
 
 ### 14.21 SB-3E U19b-2: model-call metadata sinks (SB3E-R216, R216.1, R217)
 
 **Credited (36, set B), harness composition until M-5b.** Each cell drives the real call sink
 code on the real session through the harness's own model lane (`s5.rs` `ModelLane`); the
-shipped binary makes no model call before M-5b (`hands.rs:1312-1323`). The call's ords 1-3
+shipped binary makes no model call before M-5b (`hands.rs:1339-1350`). The call's ords 1-3
 are `check_runtime`'s metadata requests (`ollama.rs:137`; `/api/version` :249, `/api/status`
 :265, `/api/tags` :285), before its charge (:138). Each row is held at its own ord from the
 call's first arrival (`s5.rs` `called`, as `ord3_quit`).
 
 | Rows | Sink (ord) | Value | How |
 |---|---|---|---|
-| x:154-159, 137-142, 120-125 | call_version (1), call_tags (3), call_status (2) | CR, LF, CRLF, EOF, partial_Ctrl_D, master_close | typed on the reader (`Reading`, as hands.rs:1092, :1130) while the ord's `model.call.observed` is held |
+| x:154-159, 137-142, 120-125 | call_version (1), call_tags (3), call_status (2) | CR, LF, CRLF, EOF, partial_Ctrl_D, master_close | typed on the reader (`Reading`, as hands.rs:1119, :1157) while the ord's `model.call.observed` is held |
 | x:162, 167, 145, 150, 128, 133 | the same | repeated, quit | applied while held |
 | x:557-560, 552-555, 547-550 | the same | Emergency, Failed, ClosingNormal, ClosingRestricted | reached while the ord's `call.gate` is held |
 
-**F1 (binding on M-5b, restated).** These 36 rows, U19a's x:86-91 and 534-537, are listed as
-"harness composition until M-5b". M-5b owes: a production-order guard (the page call runs on
-a worker or exchange thread, never the reader; the reader stays live until after the work
-join, hands.rs:1363-1364; Stop is bound before the run, hands.rs:1130); a re-run of every
-call row on M-5b's own composition; and U22's set-B check re-run after M-5b and before O-4.
+**F1 (binding on M-5b, restated).** Every credited call row is "harness composition until
+M-5b": U5's x:93-96, 98, 99; U19a's x:86-91, 534-537; and these 36. M-5b owes: a
+production-order guard (the page call runs on a worker or exchange thread, never the reader;
+the reader stays live until after the work join, hands.rs:1390-1391; Stop is bound before the
+run, hands.rs:1157); a re-run of each of those 52 rows, by key, on M-5b's own composition; and
+U22's set-B check re-run after M-5b and before O-4.
 
 **Harness pieces (R216 F6).** The ord-n profile (`refused_at`: `n` gates, no charge or settle,
 no charge position); INV bound by the Builder's `mother.recheck` of S and Q
