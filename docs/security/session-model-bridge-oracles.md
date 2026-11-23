@@ -1844,11 +1844,13 @@ call's first arrival (`s5.rs` `called`, as `ord3_quit`).
 
 **F1 (binding on M-5b, restated).** Every credited call row is "harness composition until
 M-5b": U5's x:93-96, 98, 99; U19a's x:86-91, 534-537; these 36; and U19c's 5 identity and
-bind rows x:298, 307, 312, 607, 608 (14.23). M-5b owes: a production-order guard (the page call
+bind rows x:298, 307, 312, 607, 608 (14.23); and SEAM-2's 30 attempt and meter rows x:77, 82,
+111, 116, 188-193, 196, 201, 339, 344, 529-532, 539-542, 569-572, 630-633 (14.24). M-5b owes: a production-order guard (the page call
 and the identity and bind sinks run on a worker or exchange thread, never the reader; the reader
 stays live until after the work join, hands.rs:1390-1391; Stop is bound before the run,
-hands.rs:1157); a re-run of each of those 57 rows, by key, on M-5b's own composition; U19c's 15
-open rows (x:286-291, 294, 606, 609, S2; x:299-304, F5) run there first; and U22's set-B check
+hands.rs:1157); a re-run of each of those 87 rows, by key, on M-5b's own composition; U19c's 15
+open rows (x:286-291, 294, 606, 609, S2; x:299-304, F5) and SEAM-2's 22 (the 18 byte rows
+x:69-74, 103-108, 331-336, races A and B; read_failure x:75, 109, 194, 337) run there first; and U22's set-B check
 re-run after M-5b and before O-4.
 
 **Harness pieces (R216 F6).** The ord-n profile (`refused_at`: `n` gates, no charge or settle,
@@ -1990,3 +1992,69 @@ x:306, 310, 311, 313, 613, 781, 784, 879, 880 (bind). W2 unchanged: hold x:2-5, 
 their mutation, tests and expect: the seven main.rs terminal-arm rows (now with U19c's two
 `ctl!` entries), u5a_passive_store_commit and u19a_p1/p2 (widened to a unique span), and
 u19a_p_tr1_whole_window_dropped (the new whole-window clause made dead, as before).
+
+### 14.24 SB-3E SEAM-2: the R3 attempt and R4 meter sinks (SB3E-R242)
+
+**Credited (30, set B), harness composition until M-5b (F1, R216).** Every shipped lane has model
+cap 0 (hands.rs:172-187, lane.rs:146-148), so the shipped binary never reaches these sinks. Each
+cell drives the real sink on the Builder's one counted call (`s5.rs` `attempted`, section
+`s5_r34.rs`). C1: the advance's last step is `Err(Stopped)` on every value, `Ok(())` on a control.
+
+| Rows | Sink | Values | Held at | Outcome |
+|---|---|---|---|---|
+| x:111, 116, 539-542 | call_slot_reserve | repeated, quit, Emergency, Failed, ClosingNormal, ClosingRestricted | `attempt.slot` (model.rs:394) | `passed`; Failed `refused:slot_word` |
+| x:77, 82, 529-532 | attempt_ticket | the same six | `model.attempt.checked` (run.rs:2144) | `refused:cas` |
+| x:188-193, 196, 201, 569-572 | charge_append | CR, LF, CRLF, EOF, partial_Ctrl_D, master_close and the same six | `mother.charge.entry` (model_calls.rs:216) | `refused:stale` |
+| x:339, 344, 630-633 | meter_settle | the same six | `mother.settle` (model_calls.rs:310) | `passed` |
+
+**Notes and points (each `#[cfg(mother_route_seams)]`; ship builds unchanged, A5 re-pin judged by
+the Architect).**
+- N1 `attempt:slot_word` (model.rs:398-404): an S1 note when the session word is SEALED or FAILED,
+  under the slot hold, in its own gated statement just before the refusal check whose first
+  disjunct it is (model.rs:405-416). It is not inside the refusal block: that block's header holds
+  string literals, which the S1 site inventory (`model_call_tests.rs` ROUTE_SITES) cannot audit.
+  Token `m:371-381` (`slot_checked`) requires exactly one of the run's `model.attempt.reserved`
+  or the note after the acknowledgement on its thread, so a note with no refusal, or a refusal on
+  another disjunct, fails the cell.
+- N2 `attempt:cas` (run.rs:2149-2153, `inspect_err`): the CAS refusal's note. T6 (option C):
+  `note:cas@r:2125` is keyed by the whole branch text. **F2:** `ticket_refused` also requires no
+  later `call.gate` and no later `model.attempt.record.before` of the run.
+- P1 `mother.charge.stale` (model_calls.rs:224-226): an S5 point at the unusable or engaged-cell
+  return (S5 has no note writer; R216.1 F-B2). `charge_refused` requires no later `mother.charge`
+  of the invocation.
+- P2 `mother.settle.cleared` (model_calls.rs:327-329): an S5 point after `in_flight = false`.
+  **F3:** `passed` on a settle row requires it (`settle_cleared`), of the row's invocation.
+- Both points are in `POINTS` (now 12); the recorded path has 11 S5 sites.
+
+**Inverse controls.** `ctl_call_slot_reserve`, `ctl_attempt_ticket`, `ctl_charge_append` and
+`ctl_meter_settle` hold and release the sink; the whole attempt passes (`Ok(())`, 4 gates) and
+fails if `attempt:slot_word`, `attempt:cas` or `mother.charge.stale` fires on the admitted path.
+`mother.settle.cleared` is the pass signal itself and has no inverse control: no composition
+here enters `settle` without clearing (completeness, M-5b).
+
+**Harness pieces (`collect_att`).** The window opens at the acknowledgement; one counted call;
+the sink's measured `call.gate` count (slot 0, ticket 0, charge 3, settle 4; control 4); T6 at
+`attempt.slot`; RUN from the session's native `run_opened`, ATT from its one
+`model.attempt.granted`; the ack rule `att_ack` (the advancing worker, never the reader or the
+harness; rule test `route_s5_att_ack_binds_the_advancing_worker`); the settle barrier on the
+typed path (F5). CORRELATIONS: S and Q from the run's earlier `bind.entry` on that thread
+(`bindentry`), INV from the Builder's `mother.recheck` (`recheck`).
+
+**TR-1 (data commit).**
+
+| # | Rows | Change | Why |
+|---|---|---|---|
+| T1 | all 27 tagged call_slot_reserve rows | drop `att=ATT` from the entry and check tags; DRIVER_KEYS `d_call@call_slot_reserve=s,q,run,inv` (a `driver@sink` set is the row's when listed) | no attempt ordinal exists at `attempt.slot` (model.rs:394 precedes run.rs:2120) |
+| T2 | x:77, 82, 529-532, 111, 116, 539-542 | `ledger=+0:all[s=S]` → `+1:MissionEnd[s=S],+1:run_cancelled[s=S]` | the Stop's own two records are in the window (R202 S1 whole-window clause) |
+| T3 | x:339, 344, 630-633 | → `+1:model_call[run=RUN att=ATT],+1:MissionEnd[s=S],+1:run_cancelled[s=S];window=completed_attempt` | the call completed before the hold |
+| T4 | x:188-193, 196, 201, 569-572 | `window=boundary` → `window=completed_attempt` | the same; ledger text unchanged |
+| T6 | ticket branch token | whole text `note:cas@r:2125` | `note:cas` names U19b-1's refusal |
+
+**Not credited, M-5b's list (by key).** Race A (R232: the bound Stop's worker against
+`door.cancel_run`; `run_cancelled` is or is not written): the byte rows CR, LF, CRLF, EOF,
+partial_Ctrl_D, master_close of call_slot_reserve x:103-108, attempt_ticket x:69-74 and
+meter_settle x:331-336. Race B (the registration `StopWatch` against the slot check,
+model.rs:405-414): x:103-105 also vary between `passed` and a refusal on the watch disjunct.
+read_failure x:75, 109, 194, 337 (no armed S5 reader child). Only charge_append has credited
+byte rows, so the bare-terminator plant applies to it alone (F-S0-B). The W1, W2 and W3 rows of
+the four sinks are unchanged.

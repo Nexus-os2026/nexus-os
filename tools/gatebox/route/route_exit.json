@@ -1,7 +1,7 @@
 {
  "about": [
   "SB-3E U4 exit gate data (route_exit.py). inventory: the lane harness's names as U5b lists them",
-  "(SB3E-R86.4, U5b: 48 names; W0b: 50; its fix rounds 1 and 2: 52, 53; U9a: 73; U6a-1: 81; U9b: 90; U18: 91; U9b+U18 merge: 100; SEAM-1: 113; U19a: 154, R202: 155; U21a: 164; U19b-1: 214; G2 with U20a: 214; U19b-2 on G2: 253; U19c: 261; U20b: 269; G3 merge: 277) and their sha256 under the policy rule (route-cells.json `inventory`).",
+  "(SB3E-R86.4, U5b: 48 names; W0b: 50; its fix rounds 1 and 2: 52, 53; U9a: 73; U6a-1: 81; U9b: 90; U18: 91; U9b+U18 merge: 100; SEAM-1: 113; U19a: 154, R202: 155; U21a: 164; U19b-1: 214; G2 with U20a: 214; U19b-2 on G2: 253; U19c: 261; U20b: 269; G3 merge: 277; SEAM-2: 312) and their sha256 under the policy rule (route-cells.json `inventory`).",
   "desktop_tests: the desktop package's tests the gate runs besides lib and bins (`live` needs a desktop).",
   "plants: route_plants.json's plant count and sha256 of its names (LF-joined, in order); the same for the names without `expect` (sorted; R53: the two only a refused build kills); file_sha256: the whole file (R55.6)."
  ],
@@ -12,11 +12,14 @@
  ],
  "inventory": {
   "names": [
+   "cells::ctl_attempt_ticket",
    "cells::ctl_call_chat",
+   "cells::ctl_call_slot_reserve",
    "cells::ctl_call_status",
    "cells::ctl_call_tags",
    "cells::ctl_call_version",
    "cells::ctl_cancel_run",
+   "cells::ctl_charge_append",
    "cells::ctl_close_obligations",
    "cells::ctl_close_report",
    "cells::ctl_close_restrict",
@@ -24,6 +27,7 @@
    "cells::ctl_emergency_restrict",
    "cells::ctl_identity_view",
    "cells::ctl_inference_binding",
+   "cells::ctl_meter_settle",
    "cells::ctl_mother_end",
    "cells::ctl_primary_end",
    "cells::ctl_producer_join",
@@ -92,6 +96,36 @@
    "cells::rc_r1_identity_view_lifecycle_failed",
    "cells::rc_r2_inference_binding_ingress_quit",
    "cells::rc_r2_inference_binding_ingress_repeated",
+   "cells::rc_r3_attempt_ticket_ingress_quit",
+   "cells::rc_r3_attempt_ticket_ingress_repeated",
+   "cells::rc_r3_attempt_ticket_lifecycle_closingnormal",
+   "cells::rc_r3_attempt_ticket_lifecycle_closingrestricted",
+   "cells::rc_r3_attempt_ticket_lifecycle_emergency",
+   "cells::rc_r3_attempt_ticket_lifecycle_failed",
+   "cells::rc_r3_call_slot_reserve_ingress_quit",
+   "cells::rc_r3_call_slot_reserve_ingress_repeated",
+   "cells::rc_r3_call_slot_reserve_lifecycle_closingnormal",
+   "cells::rc_r3_call_slot_reserve_lifecycle_closingrestricted",
+   "cells::rc_r3_call_slot_reserve_lifecycle_emergency",
+   "cells::rc_r3_call_slot_reserve_lifecycle_failed",
+   "cells::rc_r4_charge_append_ingress_cr",
+   "cells::rc_r4_charge_append_ingress_crlf",
+   "cells::rc_r4_charge_append_ingress_eof",
+   "cells::rc_r4_charge_append_ingress_lf",
+   "cells::rc_r4_charge_append_ingress_master_close",
+   "cells::rc_r4_charge_append_ingress_partial_ctrl_d",
+   "cells::rc_r4_charge_append_ingress_quit",
+   "cells::rc_r4_charge_append_ingress_repeated",
+   "cells::rc_r4_charge_append_lifecycle_closingnormal",
+   "cells::rc_r4_charge_append_lifecycle_closingrestricted",
+   "cells::rc_r4_charge_append_lifecycle_emergency",
+   "cells::rc_r4_charge_append_lifecycle_failed",
+   "cells::rc_r4_meter_settle_ingress_quit",
+   "cells::rc_r4_meter_settle_ingress_repeated",
+   "cells::rc_r4_meter_settle_lifecycle_closingnormal",
+   "cells::rc_r4_meter_settle_lifecycle_closingrestricted",
+   "cells::rc_r4_meter_settle_lifecycle_emergency",
+   "cells::rc_r4_meter_settle_lifecycle_failed",
    "cells::rc_r5_call_chat_ingress_cr",
    "cells::rc_r5_call_chat_ingress_crlf",
    "cells::rc_r5_call_chat_ingress_eof",
@@ -239,6 +273,7 @@
    "route_store_commit_hold_fires_on_an_ordinary_append",
    "route_unarmed_point_records_nothing_and_does_not_block",
    "s5::route_s4b_poisons_the_coordinator_before_its_lock",
+   "s5::route_s5_att_ack_binds_the_advancing_worker",
    "s5::route_s5_cancel_run_ack_controls_each_refuse",
    "s5::route_s5_close_credit_plants_each_refuse",
    "s5::route_s5_close_window_opens_at_the_hold",
@@ -290,13 +325,13 @@
    "witness::witness_token_map_plants_each_fail",
    "witness::witness_wave_rows_render_from_recorded_identity"
   ],
-  "sha256": "8c11cd404b821ced93a15694be77d6a7d79953e6745468a29444f469378b2a65"
+  "sha256": "7c3727ab4839807f29e6eb1a895b7220f8316d97039ae542d36b4a066a99b8b0"
  },
  "plants": {
-  "count": 439,
-  "names_sha256": "ae35715a22ce49747a1b89dc7b22e830a0e2a2495d176decb1183cdacd4d8bb2",
+  "count": 458,
+  "names_sha256": "f7daecbfe30b1477f4026251edee2eaec26011ae7f7d101bfb316fe38e22be52",
   "without_expect_sha256": "7d0ab87de1767d50461282e38349a037a95a66a2a389dd9e4075bc61bf35940d",
   "without_expect_count": 2,
-  "file_sha256": "44e78f0aff1a551c6577d552534b049c13275ff8a9d0837afe817333f6d16201"
+  "file_sha256": "0399e49b24d3b8a0f1b311cae00b0cf202b22a44a8c8cb05480ef061d8e79097"
  }
 }

@@ -1,5 +1,91 @@
 # SB-3E A5 C2 pin (SB3E-R72): nexus_governed_control (crates/nexus-governed-control/src/lib.rs), rustc -Zunpretty=expanded, shipped vs lane recipe.
 # Per differing enclosing item: === side, module path, item, occurrences of the exact text in that side's unit, bytes (tab-separated); then exactly that many bytes of text.
+=== ship	pub mod authority > pub mod run > impl RunRegistry	pub ( crate ) fn admit_session_attempt ( self : & Arc < Self > , ( run , agent , group , identity ) : ( RunId , & AgentId , GroupId , [ u8 ; 32 ] ) ,	count 1	bytes 4463
+            pub(crate) fn admit_session_attempt(self: &Arc<Self>,
+                (run, agent, group, identity):
+                    (RunId, &AgentId, GroupId, [u8; 32]), original: &HaltCell,
+                grant: &OriginalGrant<'_>,
+                invocation: &crate::inference::InvocationObserver)
+                -> Result<SessionAttempt, AuthorityError> {
+                let mut table =
+                    self.runs.try_lock().map_err(|error|
+                                {
+                                    if #[allow(non_exhaustive_omitted_patterns)] match error {
+                                            TryLockError::Poisoned(_) => true,
+                                            _ => false,
+                                        } {
+                                        original.fail_session();
+                                    }
+                                    AuthorityError::Unavailable("model run hold unavailable")
+                                })?;
+                if self.stopped.load(Ordering::SeqCst) {
+                    return Err(AuthorityError::EmergencyStopped);
+                }
+                if self.closed.load(Ordering::SeqCst) {
+                    return Err(AuthorityError::Closed("the desktop is quitting"));
+                }
+                let door =
+                    crate::governed::AgentDoor::retained_identity(&live_door(&mut table.doors,
+                                                group, agent)?.life, group, agent,
+                                original).ok_or(AuthorityError::NotMember)?;
+                let door_halted =
+                    live_door(&mut table.doors, group,
+                                    agent)?.halt_flag.clone();
+                let entry =
+                    table.runs.get(&run).ok_or(AuthorityError::UnknownRun)?;
+                live_member(&table, entry, agent, group)?;
+                host_prerequisites(&table, entry,
+                        self.stop_number.load(Ordering::SeqCst))?;
+                let cell =
+                    entry.file_cell.as_ref().filter(|c|
+                                        c.host() &&
+                                            c.same(original)).ok_or(AuthorityError::NotMember)?.clone();
+                if entry.opened_by != Some(group) {
+                    return Err(AuthorityError::NotMember);
+                }
+                let files =
+                    entry.files_admission.as_ref().ok_or(AuthorityError::NotAdmitted)?;
+                let admission =
+                    entry.inference_admission.as_ref().ok_or(AuthorityError::NotAdmitted)?;
+                if admission.identity != identity {
+                    return Err(AuthorityError::ModelIdentityMismatch);
+                }
+                if admission.contract_hash != files.contract_hash ||
+                                    admission.request != files.request ||
+                                admission.evidence_seq != files.evidence_seq ||
+                            admission.kind != files.kind ||
+                        admission.consented_wall_ms != files.consented_wall_ms {
+                    return Err(AuthorityError::NoConsent);
+                }
+                if entry.model_attempts >= MAX_MODEL_ATTEMPTS {
+                    return Err(AuthorityError::ModelCall(ModelError::OverBudget));
+                }
+                let ordinal =
+                    entry.model_attempts.checked_add(1).ok_or(AuthorityError::Capacity)?;
+                let _grant_held = grant.live(files)?;
+                let ticket =
+                    SessionAttempt {
+                        run,
+                        agent: agent.clone(),
+                        group,
+                        admission: admission.clone(),
+                        ordinal,
+                        door,
+                        registry: Arc::downgrade(self),
+                        cell: cell.clone(),
+                        cancelled: entry.cancelled.clone(),
+                        door_halted,
+                    };
+                let entry =
+                    table.runs.get_mut(&run).ok_or(AuthorityError::UnknownRun)?;
+                if invocation.is_revoked() {
+                    return Err(AuthorityError::Halted);
+                }
+                cell.admit().inspect_err(|_| {})?;
+                entry.model_attempts = ordinal;
+                entry.model_pins.insert(ordinal);
+                Ok(ticket)
+            }
 === ship	pub mod authority > pub mod run > impl RunRegistry	pub ( crate ) fn admit_session_inference ( & self , b : SessionBinding < '_ > ) -> Result < ( ) , AuthorityError >	count 1	bytes 6726
             pub(crate) fn admit_session_inference(&self,
                 b: SessionBinding<'_>) -> Result<(), AuthorityError> {
@@ -337,7 +423,7 @@
                                     };
                                 }));
             }
-=== lane	pub mod authority > pub mod run > impl RunRegistry	pub ( crate ) fn admit_session_attempt ( self : & Arc < Self > , ( run , agent , group , identity ) : ( RunId , & AgentId , GroupId , [ u8 ; 32 ] ) ,	count 1	bytes 4683
+=== lane	pub mod authority > pub mod run > impl RunRegistry	pub ( crate ) fn admit_session_attempt ( self : & Arc < Self > , ( run , agent , group , identity ) : ( RunId , & AgentId , GroupId , [ u8 ; 32 ] ) ,	count 1	bytes 4904
             pub(crate) fn admit_session_attempt(self: &Arc<Self>,
                 (run, agent, group, identity):
                     (RunId, &AgentId, GroupId, [u8; 32]), original: &HaltCell,
@@ -422,7 +508,11 @@
                 }
                 route_seams::at("model.attempt.checked",
                     Ctx::default().run(run).attempt(ordinal));
-                cell.admit()?;
+                cell.admit().inspect_err(|_|
+                            {
+                                route_seams::note("attempt:cas",
+                                    Ctx::default().run(run).attempt(ordinal));
+                            })?;
                 entry.model_attempts = ordinal;
                 entry.model_pins.insert(ordinal);
                 Ok(ticket)
@@ -1646,7 +1736,7 @@
                     Err(error) => Err(error),
                 }
             }
-=== lane	pub mod host_session > mod model	impl Attempt	count 1	bytes 6518
+=== lane	pub mod host_session > mod model	impl Attempt	count 1	bytes 6761
         impl Attempt {
             pub(super) fn acquire(core: &Arc<Core>, authority: &Authority,
                 (run, agent, group, identity):
@@ -1662,6 +1752,10 @@
                         let _producers =
                             core.producers.try_lock().map_err(|_| busy(()))?;
                         let mut s = hold(core).map_err(|_| busy(()))?;
+                        if core.cell.session_word() & (SEALED | FAILED) != 0 {
+                            route_seams::note("attempt:slot_word",
+                                Ctx::session(core.identity).run(run));
+                        }
                         if core.cell.session_word() & (SEALED | FAILED) != 0 ||
                                                 s.active || core.model.uncertain.load(Ordering::SeqCst) ||
                                         s.record.is_some_and(|r|
