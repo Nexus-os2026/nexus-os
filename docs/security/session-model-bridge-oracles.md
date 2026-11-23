@@ -1843,13 +1843,15 @@ call's first arrival (`s5.rs` `called`, as `ord3_quit`).
 | x:557-560, 552-555, 547-550 | the same | Emergency, Failed, ClosingNormal, ClosingRestricted | reached while the ord's `call.gate` is held |
 
 **F1 (binding on M-5b, restated).** Every credited call row is "harness composition until
-M-5b": U5's x:93-96, 98, 99; U19a's x:86-91, 534-537; these 36; and U19c's 5 identity and
-bind rows x:298, 307, 312, 607, 608 (14.23). M-5b owes: a production-order guard (the page call
-and the identity and bind sinks run on a worker or exchange thread, never the reader; the reader
-stays live until after the work join, hands.rs:1390-1391; Stop is bound before the run,
-hands.rs:1157); a re-run of each of those 57 rows, by key, on M-5b's own composition; U19c's 15
-open rows (x:286-291, 294, 606, 609, S2; x:299-304, F5) run there first; and U22's set-B check
-re-run after M-5b and before O-4.
+M-5b": U5's x:93-96, 98, 99; U19a's x:86-91, 534-537; these 36; U19c's 5 identity and bind
+rows x:298, 307, 312, 607, 608 (14.23); and U20c's 31 rows x:43, 48, 60, 65, 316-321, 324, 327,
+357, 362, 371, 399, 519-522, 524-527, 625-628, 636-638 (14.25). M-5b owes: a production-order
+guard (the page call and the identity and bind sinks run on a worker or exchange thread, never
+the reader; the reader stays live until after the work join, hands.rs:1390-1391; Stop is bound
+before the run, hands.rs:1157); a re-run of each of those 88 rows, by key, on M-5b's own
+composition; U19c's 15 open rows (x:286-291, 294, 606, 609, S2; x:299-304, F5) and U20c's 24
+(x:35-40, 52-57, 349-354, 366-368, 394-396; 14.25) run there first; and U22's set-B check re-run
+after M-5b and before O-4.
 
 **Harness pieces (R216 F6).** The ord-n profile (`refused_at`: `n` gates, no charge or settle,
 no charge position); INV bound by the Builder's `mother.recheck` of S and Q
@@ -1990,3 +1992,81 @@ x:306, 310, 311, 313, 613, 781, 784, 879, 880 (bind). W2 unchanged: hold x:2-5, 
 their mutation, tests and expect: the seven main.rs terminal-arm rows (now with U19c's two
 `ctl!` entries), u5a_passive_store_commit and u19a_p1/p2 (widened to a unique span), and
 u19a_p_tr1_whole_window_dropped (the new whole-window clause made dead, as before).
+
+### 14.25 SB-3E U20c: the R7 and R8 sinks past the chat (SB3E-R243)
+
+**Credited (31, set B), harness composition until M-5b (F1).** Every shipped lane has model cap 0
+(hands.rs:172-187), so the shipped binary makes no model call and its lanes reach
+`mother.lane.prelock` without one. Each cell drives the real sink on the real session through the
+harness's own model lane (`s5.rs` `late`; sections `s5_r7.rs`, `s5_r8.rs`). The value is applied
+from the harness thread while the sink's own point is held on the advancing worker; the six lane
+byte rows are typed on the reader (`Reading`, `reader::tied`).
+
+| Rows | Sink | Value | Held at | C1: last step, mission end, the call |
+|---|---|---|---|---|
+| x:60, 524, 527 | attempt_record | repeated, Emergency, ClosingRestricted | `model.attempt.record.before` (model.rs:502) | `Err(Stopped)`, `Stop { reason: EmergencyStop }`, `Err(Invalidated)` |
+| x:65, 525, 526 | attempt_record | quit, Failed, ClosingNormal | the same | `Err(Stopped)`, `Stop { reason: Owner }`, `Err(Invalidated)` |
+| x:43, 519, 522; 48, 520, 521 | attempt_pin_release | as the two rows above | `model.settle.before` (run.rs:2165-2168) | as above |
+| x:357, 636, 638; 362, 637 | operation_complete | repeated, Emergency, ClosingRestricted; quit, Failed | `complete` (model.rs:513) | as above |
+| x:371 | post_record_recheck | repeated | `mother.recheck` (model_calls.rs:491) | `Err(Stopped)`, `Stop { reason: EmergencyStop }`, `Err(Invalidated)` |
+| x:399 | record_first_classify | repeated | `mother.classify` (adapter/mod.rs:850-853) | the same |
+| x:316-321, 324, 327, 625-628 | lane_result_admission | CR, LF, CRLF, EOF, partial_Ctrl_D, master_close, repeated, quit, Emergency, Failed, ClosingNormal, ClosingRestricted | the Builder's `mother.lane.prelock` (coordinator.rs:1979-1983) | `Err(Stopped)`, none in the window, `Ok(())` |
+
+**C1 (R194, R243).** `drive_call` records the call's own result (3 lines; the pinned region moved
+with it); `late` fails a cell unless the advance's last step, the mission's end in the window and
+that result are the row's. In the lane rows the call has already returned `Ok`: the refusal is the
+admission's, and it journals nothing (so the window holds no mission end).
+
+**Harness predicates (witness.rs, at the file's end; production writes no note here).**
+- `admit_refused` (finding E; `note:admit_session`): after the acknowledged prelock, on its
+  thread, the admitted `mother.admit` of INV and no later `mother.admit.ok` of INV; only
+  `admit_session` lies between the two points (coordinator.rs:711-723). Accepted with C1 and the
+  `+0:LaneReturned` ledger. `admit_passed` (`co:719-723`) is its control's passing form.
+- `not_live` (finding D; `note:not_live`): the acknowledged `mother.recheck` and no later
+  `mother.lane.prelock` of INV. **Alone it is vacuous**: the lane stops before the prelock whether
+  or not the call was refused (coordinator.rs:1972). x:371 is credited only with C1's call result
+  `Err(Invalidated)` bound; plant `u20c_p_recheck_live_guard_dropped` is killed by C1 alone.
+  `live` (`mc:491`) is its control's passing form.
+- `record_written` (`m:470`): the acknowledged record point, then the admitted `complete` on its
+  thread (model.rs:1001-1002). `rechecked` (`m:478`, `r:2146-2153`, `ad:549-558`): the
+  acknowledged point, then the Builder's `mother.recheck` on its thread.
+
+**`d_lane` (finding G).** `mother.lane.prelock` is reached by every lane; the hold is re-armed
+until the acknowledged invocation is the Builder's recorded one (arrival 6, printed), and
+`credit` runs under `LANE_REFUSED` (one prelock, one `mother.admit`, no `mother.admit.ok`, no
+return). **Production order** (report.rs
+`route_report_stop_holds_lane_admission_off_the_reader`): `hands::run` held at the first
+`mother.lane.prelock`, `stop` typed; it fails unless the hold is on a worker, the reader reads and
+presses once while held, and the held invocation's `mother.admit` has no `mother.admit.ok`.
+
+**Controls.** One `none` control per sink (`ctl_<sink>`): held, released, the advance `Ok`, the
+call `Ok`, no mission end; the lane control renders `mother.admit.ok` and `+1:LaneReturned`.
+
+**TR-1 (data commit).**
+- Finding B: the 13 ledgers x:43, 48, 357, 362, 371, 399, 519-522, 636-638 `+0:all[s=S]` →
+  `+1:MissionEnd[s=S],+1:run_cancelled[s=S]` (14.23's named form and whole-window clause).
+- Finding A: `window=boundary` → `completed_attempt` on the 31 credited rows. The rule is
+  unchanged: the window reads the whole trace (witness.rs `window`, :1204-1215; :1148-1158 at
+  the base), and the attempt completes in it before the sink is held (the same form as R242
+  T3/T4).
+
+**Not credited, M-5b (24, with 14.23's x:299-304).** Race A, as R232: a typed value goes through
+the reader's bound Stop route, whose worker races the coordinator's `door.cancel_run`; when the
+worker wins no `run_cancelled` is written. Finding C: the 18 byte rows x:35-40
+(attempt_pin_release), 349-354 (operation_complete), 366-368 (post_record_recheck), 394-396
+(record_first_classify) render two witnesses. Finding H: the 6 attempt_record byte rows x:52-57
+render one, but the native window under them varies. No credited row of the five model sinks is a
+byte row, so F-S0-B's bare-terminator plant applies to the lane rows only (`u20c_p_bare_d_lane`).
+
+**Ledger by key.** read_failure x:41, 58, 322, 355, 369, 397 (GB4b). W1 (U22): x:44, 45, 50; 61,
+62, 67; 358, 359, 364; 329; 372, 373, 375; 400, 401, 403. W3: x:42, 46, 47, 49, 51, 518, 709,
+713, 846, 847; 59, 63, 64, 66, 68, 523, 714-718, 848, 849; 356, 360, 361, 363, 365, 635, 797,
+798, 884, 885; 323, 325, 326, 328, 330, 624, 785, 788; 370, 374, 376, 802; 398, 402, 404, 808.
+W2 unchanged (24: hold 6, amend 9, denial 9). Finding I: the nine denial rows x:621-623, 639-641,
+649-651 name `sb3e_unresolved_lane_refuses_seal` (session_model_bridge.rs:337), which does not
+exist; owed, not this unit.
+
+**Re-anchored plants (R59.2, data).** Twelve earlier rows whose `old` text U20c moved keep their
+mutation, tests and expect: the seven main.rs terminal-arm rows (now with U20c's six `ctl!`
+entries), the three count-after-the-call rows and r42_drive_call_span_stretched_reset (on
+`drive_call`'s new body), and r55_cells_row_malformed (ROUTE_CELLS' last rows, rehashed).

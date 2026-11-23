@@ -1,7 +1,7 @@
 {
  "about": [
   "SB-3E U4 exit gate data (route_exit.py). inventory: the lane harness's names as U5b lists them",
-  "(SB3E-R86.4, U5b: 48 names; W0b: 50; its fix rounds 1 and 2: 52, 53; U9a: 73; U6a-1: 81; U9b: 90; U18: 91; U9b+U18 merge: 100; SEAM-1: 113; U19a: 154, R202: 155; U21a: 164; U19b-1: 214; G2 with U20a: 214; U19b-2 on G2: 253; U19c: 261; U20b: 269; G3 merge: 277) and their sha256 under the policy rule (route-cells.json `inventory`).",
+  "(SB3E-R86.4, U5b: 48 names; W0b: 50; its fix rounds 1 and 2: 52, 53; U9a: 73; U6a-1: 81; U9b: 90; U18: 91; U9b+U18 merge: 100; SEAM-1: 113; U19a: 154, R202: 155; U21a: 164; U19b-1: 214; G2 with U20a: 214; U19b-2 on G2: 253; U19c: 261; U20b: 269; G3 merge: 277; U20c: 315) and their sha256 under the policy rule (route-cells.json `inventory`).",
   "desktop_tests: the desktop package's tests the gate runs besides lib and bins (`live` needs a desktop).",
   "plants: route_plants.json's plant count and sha256 of its names (LF-joined, in order); the same for the names without `expect` (sorted; R53: the two only a refused build kills); file_sha256: the whole file (R55.6)."
  ],
@@ -12,6 +12,8 @@
  ],
  "inventory": {
   "names": [
+   "cells::ctl_attempt_pin_release",
+   "cells::ctl_attempt_record",
    "cells::ctl_call_chat",
    "cells::ctl_call_status",
    "cells::ctl_call_tags",
@@ -24,9 +26,13 @@
    "cells::ctl_emergency_restrict",
    "cells::ctl_identity_view",
    "cells::ctl_inference_binding",
+   "cells::ctl_lane_result_admission",
    "cells::ctl_mother_end",
+   "cells::ctl_operation_complete",
+   "cells::ctl_post_record_recheck",
    "cells::ctl_primary_end",
    "cells::ctl_producer_join",
+   "cells::ctl_record_first_classify",
    "cells::ctl_registration_install",
    "cells::ctl_registration_readiness",
    "cells::ctl_registration_record",
@@ -193,6 +199,37 @@
    "cells::rc_r6_emergency_restrict_lifecycle_bootstrap",
    "cells::rc_r6_emergency_restrict_lifecycle_emergency",
    "cells::rc_r6_emergency_restrict_lifecycle_failed",
+   "cells::rc_r7_attempt_pin_release_ingress_quit",
+   "cells::rc_r7_attempt_pin_release_ingress_repeated",
+   "cells::rc_r7_attempt_pin_release_lifecycle_closingnormal",
+   "cells::rc_r7_attempt_pin_release_lifecycle_closingrestricted",
+   "cells::rc_r7_attempt_pin_release_lifecycle_emergency",
+   "cells::rc_r7_attempt_pin_release_lifecycle_failed",
+   "cells::rc_r7_attempt_record_ingress_quit",
+   "cells::rc_r7_attempt_record_ingress_repeated",
+   "cells::rc_r7_attempt_record_lifecycle_closingnormal",
+   "cells::rc_r7_attempt_record_lifecycle_closingrestricted",
+   "cells::rc_r7_attempt_record_lifecycle_emergency",
+   "cells::rc_r7_attempt_record_lifecycle_failed",
+   "cells::rc_r7_operation_complete_ingress_quit",
+   "cells::rc_r7_operation_complete_ingress_repeated",
+   "cells::rc_r7_operation_complete_lifecycle_closingrestricted",
+   "cells::rc_r7_operation_complete_lifecycle_emergency",
+   "cells::rc_r7_operation_complete_lifecycle_failed",
+   "cells::rc_r8_lane_result_admission_ingress_cr",
+   "cells::rc_r8_lane_result_admission_ingress_crlf",
+   "cells::rc_r8_lane_result_admission_ingress_eof",
+   "cells::rc_r8_lane_result_admission_ingress_lf",
+   "cells::rc_r8_lane_result_admission_ingress_master_close",
+   "cells::rc_r8_lane_result_admission_ingress_partial_ctrl_d",
+   "cells::rc_r8_lane_result_admission_ingress_quit",
+   "cells::rc_r8_lane_result_admission_ingress_repeated",
+   "cells::rc_r8_lane_result_admission_lifecycle_closingnormal",
+   "cells::rc_r8_lane_result_admission_lifecycle_closingrestricted",
+   "cells::rc_r8_lane_result_admission_lifecycle_emergency",
+   "cells::rc_r8_lane_result_admission_lifecycle_failed",
+   "cells::rc_r8_post_record_recheck_ingress_repeated",
+   "cells::rc_r8_record_first_classify_ingress_repeated",
    "cells::rc_r9_close_obligations_lifecycle_bootstrap",
    "cells::rc_r9_close_obligations_lifecycle_closingrestricted",
    "cells::rc_r9_close_obligations_lifecycle_emergency",
@@ -229,6 +266,7 @@
    "reader::route_s6_binds_the_stop_route",
    "report::route_report_decline_holds_cancel_run_off_the_reader",
    "report::route_report_panic_unwinds_the_close_worker",
+   "report::route_report_stop_holds_lane_admission_off_the_reader",
    "report::route_report_unarmed_records_nothing",
    "report::route_report_unreleased_hold_times_out_and_aborts",
    "route_armed_panic_begins_an_unwind",
@@ -290,13 +328,13 @@
    "witness::witness_token_map_plants_each_fail",
    "witness::witness_wave_rows_render_from_recorded_identity"
   ],
-  "sha256": "8c11cd404b821ced93a15694be77d6a7d79953e6745468a29444f469378b2a65"
+  "sha256": "d8885d5e1abba4710a070f5e69eb9a6477e451f792b1fc4b37b37d28d7f8a9ee"
  },
  "plants": {
-  "count": 439,
-  "names_sha256": "ae35715a22ce49747a1b89dc7b22e830a0e2a2495d176decb1183cdacd4d8bb2",
+  "count": 447,
+  "names_sha256": "74115e9819d33298ad022394ef2318dd69c38205fd494c145bf39a62b77b8eba",
   "without_expect_sha256": "7d0ab87de1767d50461282e38349a037a95a66a2a389dd9e4075bc61bf35940d",
   "without_expect_count": 2,
-  "file_sha256": "44e78f0aff1a551c6577d552534b049c13275ff8a9d0837afe817333f6d16201"
+  "file_sha256": "b87da42009d74c59eddfc1deb16d52f19fae8fcdcd76277c61c4991bf6b57a32"
  }
 }
