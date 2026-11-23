@@ -4477,7 +4477,7 @@ fn sb3e_u20a_close_callers() {
     let reader = "    let reader_done = terminal.stop_reader(producers_until);\n";
     let (bin, exit) = (
         "host/src/bin/mother-hands.rs",
-        "use std::process::ExitCode;\n",
+        concat!("use std::", "process::ExitCode;\n"),
     );
     let (term, input) = (
         "host/src/terminal.rs",
