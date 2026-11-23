@@ -2046,10 +2046,10 @@ typed path (F5). CORRELATIONS: S and Q from the run's earlier `bind.entry` on th
 
 | # | Rows | Change | Why |
 |---|---|---|---|
-| T1 | all 27 tagged call_slot_reserve rows | drop `att=ATT` from the entry and check tags; DRIVER_KEYS `d_call@call_slot_reserve=s,q,run,inv` (a `driver@sink` set is the row's when listed) | no attempt ordinal exists at `attempt.slot` (model.rs:394 precedes run.rs:2120) |
+| T1 | all 26 tagged call_slot_reserve rows | drop `att=ATT` from the entry and check tags; DRIVER_KEYS `d_call@call_slot_reserve=s,q,run,inv` (a `driver@sink` set is the row's when listed) | no attempt ordinal exists at `attempt.slot` (model.rs:394 precedes run.rs:2120) |
 | T2 | x:77, 82, 529-532, 111, 116, 539-542 | `ledger=+0:all[s=S]` → `+1:MissionEnd[s=S],+1:run_cancelled[s=S]` | the Stop's own two records are in the window (R202 S1 whole-window clause) |
-| T3 | x:339, 344, 630-633 | → `+1:model_call[run=RUN att=ATT],+1:MissionEnd[s=S],+1:run_cancelled[s=S];window=completed_attempt` | the call completed before the hold |
-| T4 | x:188-193, 196, 201, 569-572 | `window=boundary` → `window=completed_attempt` | the same; ledger text unchanged |
+| T3 | x:339, 344, 630-633 | → `+1:model_call[run=RUN att=ATT],+1:MissionEnd[s=S],+1:run_cancelled[s=S];window=completed_attempt` | the `+1:model_call` record is written after the hold's acknowledgement, in the window that `reopen` opens there (s5.rs:4104) |
+| T4 | x:188-193, 196, 201, 569-572 | `window=boundary` → `window=completed_attempt` | measured under the unchanged `window` rule; ledger text unchanged |
 | T6 | ticket branch token | whole text `note:cas@r:2125` | `note:cas` names U19b-1's refusal |
 
 **Not credited, M-5b's list (by key).** Race A (R232: the bound Stop's worker against
@@ -2059,7 +2059,11 @@ meter_settle x:331-336. Race B (the registration `StopWatch` against the slot ch
 model.rs:405-414): x:103-105 also vary between `passed` and a refusal on the watch disjunct.
 read_failure x:75, 109, 194, 337 (no armed S5 reader child). Only charge_append has credited
 byte rows, so the bare-terminator plant applies to it alone (F-S0-B). The W1, W2 and W3 rows of
-the four sinks are unchanged.
+the four sinks are unchanged except for one key: TR-1 T1 dropped `att=ATT`, and only that, from
+the entry and check tags of all 26 tagged call_slot_reserve rows. 13 are in this unit's scope
+(the six credited x:111, 116, 539-542, which T2 also changed; the held byte rows x:103-108;
+read_failure x:109). The other 13 are uncredited W rows: x:110, 112-115, 117-119, 538, 731,
+736, 854, 855.
 
 ### 14.25 SB-3E U20c: the R7 and R8 sinks past the chat (SB3E-R243)
 
@@ -2115,8 +2119,11 @@ call `Ok`, no mission end; the lane control renders `mother.admit.ok` and `+1:La
   `+1:MissionEnd[s=S],+1:run_cancelled[s=S]` (14.23's named form and whole-window clause).
 - Finding A: `window=boundary` → `completed_attempt` on the 31 credited rows. The rule is
   unchanged: the window reads the whole trace (witness.rs `window`, :1227-1238; :1148-1158 at
-  the base), and the attempt completes in it before the sink is held (the same form as R242
-  T3/T4).
+  the base), and both attempt sites (`model.attempt.record.before`, `complete`) are admitted in
+  every credited cell's whole trace (measured 10/10). In the 14 R8 rows the attempt completes
+  before the sink is held. In the 17 R7 rows it does not: the sink is held at or before
+  `complete` (model.rs:509, 520; run.rs:2170-2173), and `complete` is reached at or after the
+  hold, not before it.
 
 **Not credited, M-5b (24, with 14.23's x:299-304).** Race A, as R232: a typed value goes through
 the reader's bound Stop route, whose worker races the coordinator's `door.cancel_run`; when the

@@ -259,9 +259,9 @@ refused:1.cancelled|s q run att kind ord|host_session/model.rs:788, 893-899
 model.attempt.record.before|s run att|host_session/model.rs:519-523
 complete|s run att|host_session/model.rs:519-523
 mother.charge.entry|s q inv|mother coordinator/model_calls.rs:203-206, 216
-mother.settle|s q inv|mother coordinator/model_calls.rs:203-206, 307
+mother.settle|s q inv|mother coordinator/model_calls.rs:203-206, 310
 attempt.slot|s run|host_session/model.rs:383
-model.attempt.reserved|s run|host_session/model.rs:418-420
+model.attempt.reserved|s run|host_session/model.rs:434-439
 model.attempt.checked|run att|authority/run.rs:2144-2146
 reg.reserve|s q|host_session/model.rs:122; host_session.rs:89-91
 model.record.before|s q ord=4|host_session/model.rs:301 (after the 4 metadata gates)
@@ -289,7 +289,7 @@ host.close_report.model|s|host hands.rs close_report model branch; route_seams.r
 host.close_report.string|s|host hands.rs close_report exit; route_seams.rs report
 identity|s q|host_session/model.rs:619; host_session.rs:89-91
 identity:scope_live|s q|host_session/model.rs:623; host_session.rs:89-91
-bind.entry|s q run|host_session/model.rs:565; host_session.rs:89-91
+bind.entry|s q run|host_session/model.rs:572; host_session.rs:89-91
 model.bind.checked|run|authority/run.rs:2330
 bind.done|run|authority/run.rs:2345
 bind:cas|run|authority/run.rs:2335
@@ -312,7 +312,7 @@ mother.settle.cleared|s q inv|mother coordinator/model_calls.rs:203-206, 329
 const CORRELATIONS: &str = "\
 inv|call.gate model.call.sampled model.call.observed model.call.admitted|charge|AM-2 A.4: the call's mother.charge.entry of the Builder (model_calls.rs:216)
 inv|attempt.slot model.attempt.reserved|prelock|the Builder's mother.lane.prelock of S and Q (mother coordinator.rs:1978-1983)
-inv|call.gate model.call.sampled model.call.observed model.call.admitted|recheck|U19b-2 (SB3E-R216 F6): a call refused before its charge, the Builder's mother.recheck of S and Q (model_calls.rs:491)
+inv|call.gate model.call.sampled model.call.observed model.call.admitted|recheck|U19b-2 (SB3E-R216 F6): a call refused before its charge, the Builder's mother.recheck of S and Q (model_calls.rs:497)
 q|attempt.slot model.attempt.reserved|gate|the run's later call.gate of S and Q (host_session/model.rs:883, 893-899)
 att|attempt.slot model.attempt.reserved|claim|credit's claim of the run (s5.rs credit, A.3)
 run|mother.charge.entry mother.settle|sites|credit's claim on the Builder's attempt sites (s5.rs credit, A.3)
@@ -320,7 +320,7 @@ att|mother.charge.entry mother.settle|sites|credit's claim on the Builder's atte
 s|native journal|fixture|the cell's own projection and journal in its window (s5.rs collect: since start; collect_close, registered: since the hold; kept, B1')
 s|commit|primary|the end record's S1 commit on the acknowledged close.primary's thread, after it (close.rs:524, 538; evidence_store.rs:1382-1383)
 q|native|bracket:model.record.before,model.install.before|the registration's own entries of S and Q either side of its record (host_session/model.rs:301-314)
-s|model.bind.checked bind.done bind:cas|bindentry|U19c (SB3E-R228): a bind.entry of S and Q earlier on the entry's thread, of its run (host_session/model.rs:565)
+s|model.bind.checked bind.done bind:cas|bindentry|U19c (SB3E-R228): a bind.entry of S and Q earlier on the entry's thread, of its run (host_session/model.rs:572)
 s|model.settle.before|claim|U20c (SB3E-R243): credit's claim of the ticket's run and attempt (authority/run.rs:2172; s5.rs credit, A.3)
 q|model.settle.before model.attempt.record.before complete|gate|U20c: the run's call.gate of S and Q (host_session/model.rs:890, 900-906)
 inv|model.settle.before model.attempt.record.before complete mother.classify|charge|U20c: the call's mother.charge.entry of the Builder (model_calls.rs:216)
