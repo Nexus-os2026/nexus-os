@@ -5,6 +5,7 @@
 //! production on the close worker (`hands.rs` `Runtime::close_report`).
 //! Readiness is the File-mode Normal line (hands.rs `run`, R199 Q-U21-2),
 //! never the bare ready literal. Test-only parts: the pty ownership.
+use super::s5::{admission, hold};
 use super::{child_with, Fixture, CHILD, PATIENCE};
 use nexus_governed_control::broker::route_seams as s1;
 use nexus_mother_host::route_seams as s7;
@@ -598,6 +599,84 @@ fn declined(f: &Fixture) {
     }
     if !shown.contains("session=Emergency\n") {
         found.push("order: status does not show the session Emergency".into());
+    }
+    assert!(found.is_empty(), "order: {}", found.join("; "));
+}
+
+/// U20c (SB3E-R243): lane_result_admission's production order. `hands::run`, File mode,
+/// S5 held at the first `mother.lane.prelock` (coordinator.rs:1979-1983; armed by
+/// `s5::hold` before `run`, so the first lane's), `stop` typed while held. It fails unless the hold is on a
+/// worker (not the one `host.read` thread, `hands::run`'s or the test's), the reader reads
+/// and presses one `ingress.emergency` of the session while held, and the held invocation's
+/// `mother.admit` has no `mother.admit.ok` (coordinator.rs:711-723).
+#[test]
+fn route_report_stop_holds_lane_admission_off_the_reader() {
+    let name = "report::route_report_stop_holds_lane_admission_off_the_reader";
+    child_with(name, |_| Vec::new(), admission_order);
+}
+fn admission_order(f: &Fixture) {
+    let (mut found, args, tty) = (Vec::new(), file_mode(f, "U20c order\n"), Tty::open());
+    let host = s7::arm("host.close_report.string", s7::Action::Trace);
+    let traced = (s1::arm("reg.reserve", s1::Action::Trace), host);
+    drop((s1::drain_trace(), s7::drain_trace()));
+    let held = hold("mother.lane.prelock");
+    let run = std::thread::spawn(move || nexus_mother_host::hands::run(args.into_iter()));
+    let ids = (run.thread().id(), std::thread::current().id());
+    let mut at = tty.wait_for(0, NORMAL, PATIENCE).unwrap_or(0);
+    let typed = tty.write(b"run\r");
+    for _ in 0..3 {
+        at = answer(&tty, at, &mut found);
+    }
+    let ack = held.acknowledged.recv_timeout(tty.left()).ok();
+    if ack.is_some() && tty.write(b"stop\r") {
+        let _ = tty.wait_for(at, "STOP REQUEST RECEIVED", RELEASE);
+    }
+    let released = Instant::now();
+    drop(held);
+    let _ = tty.wait_for(at, "OPERATION END\n", PATIENCE);
+    let quit = tty.write(b"quit\r");
+    let deadline = Instant::now() + tty.left();
+    while !run.is_finished() && Instant::now() < deadline {
+        let _ = tty.wait_for(usize::MAX, "\0", Duration::from_millis(5));
+    }
+    let returned = run.is_finished().then(|| run.join().ok()).flatten();
+    tty.settle();
+    drop(tty);
+    let (broker, host) = (s1::drain_trace(), s7::drain_trace());
+    let ack = ack.unwrap_or_else(|| panic!("order: the prelock not acknowledged; {found:?}"));
+    let (admit, ok) = admission(&ack);
+    drop(traced);
+    if !typed || !quit || returned.is_none() {
+        found.push(format!("order: hands::run returned {returned:?}"));
+    }
+    let reader = host
+        .iter()
+        .find(|e| e.point == "host.read")
+        .map(|e| e.thread);
+    let one = host
+        .iter()
+        .all(|e| e.point != "host.read" || Some(e.thread) == reader);
+    let worker = |t: ThreadId| t != ack.thread;
+    if !one || !reader.is_some_and(worker) || !worker(ids.0) || !worker(ids.1) {
+        found.push("order: the hold is on the reader thread or not a worker".into());
+    }
+    // The reader records `host.read` after the read's press (terminal.rs:1426-1428).
+    let window = |at: Instant| at > ack.instant && at < released;
+    let pressed = |e: &&s1::Entry| e.point == "ingress.emergency" && !e.note && window(e.instant);
+    let pressed: Vec<&s1::Entry> = broker.iter().filter(pressed).collect();
+    let on_reader = |e: &&s1::Entry| Some(e.thread) == reader && e.session == ack.session;
+    if pressed.len() != 1 || !pressed.iter().all(on_reader) {
+        found.push(format!("order: {} presses while held", pressed.len()));
+    }
+    let after = |e: &s7::Entry| pressed.first().is_some_and(|p| e.instant > p.instant);
+    let read = |e: &s7::Entry| e.point == "host.read" && Some(e.thread) == reader && after(e);
+    if !host.iter().any(read) {
+        found.push("order: the reader read nothing while held".into());
+    }
+    // Only `admit_session` lies between the two points (coordinator.rs:716-718).
+    println!("WITNESS order: mother.admit {admit}, mother.admit.ok {ok}");
+    if ack.invocation.is_none() || (admit, ok) != (1, 0) {
+        found.push(format!("order: mother.admit {admit}, mother.admit.ok {ok}"));
     }
     assert!(found.is_empty(), "order: {}", found.join("; "));
 }

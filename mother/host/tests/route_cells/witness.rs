@@ -43,7 +43,7 @@ const KEYS: [&str; 7] = ["s", "q", "run", "inv", "att", "kind", "ord"];
 type Tag<'t> = (Option<&'t str>, Option<u64>);
 type Predicate = for<'a> fn(&View<'a>, &str, Tag) -> Option<Seen<'a>>;
 type Token = (&'static str, &'static str, Predicate);
-const TOKENS: [Token; 28] = [
+const TOKENS: [Token; 37] = [
     // model.call.observed, then on its thread exactly the note
     // refused:8.cas, with no model.call.admitted of the row's ord.
     ("CAS:m:774", "model.call.observed", |v, _, tag| {
@@ -107,6 +107,20 @@ const TOKENS: [Token; 28] = [
     // U20b (SB3E-R226): the acknowledged door.cancel_run (host_session.rs:1405;
     // the frozen label h:1382-1390 is `SessionDoor::cancel_run`, now h:1400-1419).
     ("h:1382-1390", "door.cancel_run", acked),
+    // U20c (SB3E-R243): the R7 and R8 sinks past the chat, each at its
+    // acknowledged point (model.rs:502, 513; run.rs:2165-2168; adapter/mod.rs:
+    // 850-853; model_calls.rs:491). Findings D and E: `note:not_live` and
+    // `note:admit_session` are harness predicates (production writes no such
+    // note); `mc:491` and `co:719-723` are their controls' passing forms.
+    ("m:470", "model.attempt.record.before", record_written),
+    ("m:478", "complete", rechecked),
+    ("r:2146-2153", "model.settle.before", rechecked),
+    ("ad:549-558", "mother.classify", rechecked),
+    ("mc:471", "mother.recheck", acked),
+    ("note:not_live", "mother.recheck", not_live),
+    ("mc:491", "mother.recheck", live),
+    ("note:admit_session", "mother.admit", admit_refused),
+    ("co:719-723", "mother.admit", admit_passed),
 ];
 /// U19c (SB3E-R228 S1): the CAS note after the acknowledgement on its thread
 /// (`after_ack`), and no `bind.done` of its run after it there: the refusal
@@ -268,6 +282,12 @@ model.bind.checked|run|authority/run.rs:2330
 bind.done|run|authority/run.rs:2345
 bind:cas|run|authority/run.rs:2335
 door.cancel_run|s q run|host_session.rs:1405; 89-91
+model.settle.before|run att|authority/run.rs:2165-2168
+mother.recheck|s q inv|mother coordinator/model_calls.rs:203-206, 491
+mother.classify|s q run|mother adapter/mod.rs:850-853
+mother.lane.prelock|s q inv|mother coordinator.rs:1979-1983
+mother.admit|s q inv|mother coordinator.rs:711-715
+mother.admit.ok|s q inv|mother coordinator.rs:719-723
 ";
 /// W0b A1b, A4: `key|points|carrier|source`: the only bindings of a tagged
 /// key a point does not record, each through the observed entry `carrier`
@@ -285,6 +305,12 @@ s|native journal|fixture|the cell's own projection and journal in its window (s5
 s|commit|primary|the end record's S1 commit on the acknowledged close.primary's thread, after it (close.rs:524, 538; evidence_store.rs:1382-1383)
 q|native|bracket:model.record.before,model.install.before|the registration's own entries of S and Q either side of its record (host_session/model.rs:301-314)
 s|model.bind.checked bind.done bind:cas|bindentry|U19c (SB3E-R228): a bind.entry of S and Q earlier on the entry's thread, of its run (host_session/model.rs:565)
+s|model.settle.before|claim|U20c (SB3E-R243): credit's claim of the ticket's run and attempt (authority/run.rs:2167; s5.rs credit, A.3)
+q|model.settle.before model.attempt.record.before complete|gate|U20c: the run's call.gate of S and Q (host_session/model.rs:883, 893-899)
+inv|model.settle.before model.attempt.record.before complete mother.classify|charge|U20c: the call's mother.charge.entry of the Builder (model_calls.rs:216)
+att|mother.classify|claim|U20c: credit's claim of the classified run (adapter/mod.rs:852; s5.rs credit, A.3)
+run|mother.recheck mother.lane.prelock mother.admit mother.admit.ok|sites|U20c: credit's claim on the Builder's own sites (s5.rs credit, A.3)
+att|mother.recheck|sites|U20c: credit's claim on the Builder's own sites (s5.rs credit, A.3)
 ";
 /// The carriers a `CORRELATIONS` row may name, a closed list.
 fn carried(name: &str, v: &View, e: Option<&Seen>) -> bool {
@@ -497,7 +523,7 @@ fn brackets(v: &View, points: &str) -> bool {
 }
 /// Behaviour 10: the controls' witnesses, by `(sink, dim)`, as measured at U5
 /// Step 0 (R86).
-const CONTROLS: [(&str, &str, &str); 24] = [
+const CONTROLS: [(&str, &str, &str); 30] = [
     ("call_chat", "ingress", CONTROL),
     ("close_obligations", "lifecycle", CLOSE_CONTROLS[0]),
     ("delivery", "lifecycle", CLOSE_CONTROLS[1]),
@@ -522,6 +548,36 @@ const CONTROLS: [(&str, &str, &str); 24] = [
     ("identity_view", "ingress", PRE_CONTROLS[0]),
     ("inference_binding", "ingress", PRE_CONTROLS[1]),
     ("cancel_run", "ingress", DOOR_CONTROL),
+    ("attempt_record", "ingress", LATE_CONTROLS[0]),
+    ("operation_complete", "ingress", LATE_CONTROLS[1]),
+    ("attempt_pin_release", "ingress", LATE_CONTROLS[2]),
+    ("record_first_classify", "ingress", LATE_CONTROLS[3]),
+    ("post_record_recheck", "ingress", LATE_CONTROLS[4]),
+    ("lane_result_admission", "ingress", LATE_CONTROLS[5]),
+];
+/// U20c (SB3E-R243): each R7 and R8 sink held at its own point and released:
+/// the call returns `Ok`, the lane's result is admitted (`mother.admit.ok`)
+/// and journalled (`+1:LaneReturned`); the window opens at the hold.
+const LATE_CONTROLS: [&str; 6] = [
+    "entry=model.attempt.record.before[s=S q=Q run=RUN inv=INV att=ATT];\
+check=m:470[s=S q=Q run=RUN inv=INV att=ATT];value=none@model.attempt.record.before ack=held won=route;\
+out=recorded@m:470;branch=none;ledger=+1:model_call[run=RUN att=ATT];window=completed_attempt;\
+deadline_fired=none",
+    "entry=complete[s=S q=Q run=RUN inv=INV att=ATT];check=m:478[s=S q=Q run=RUN inv=INV att=ATT];\
+value=none@complete ack=held won=route;out=passed@m:478;branch=none;ledger=+2:all[s=S];\
+window=completed_attempt;deadline_fired=none",
+    "entry=model.settle.before[s=S q=Q run=RUN inv=INV att=ATT];\
+check=r:2146-2153[s=S q=Q run=RUN inv=INV att=ATT];value=none@model.settle.before ack=held won=route;\
+out=passed@r:2146-2153;branch=none;ledger=+2:all[s=S];window=completed_attempt;deadline_fired=none",
+    "entry=mother.classify[s=S q=Q run=RUN inv=INV att=ATT];\
+check=ad:549-558[s=S q=Q run=RUN inv=INV att=ATT];value=none@mother.classify ack=held won=route;\
+out=passed@ad:549-558;branch=none;ledger=+2:all[s=S];window=completed_attempt;deadline_fired=none",
+    "entry=mother.recheck[s=S q=Q run=RUN inv=INV att=ATT];check=mc:471[s=S q=Q run=RUN inv=INV att=ATT];\
+value=none@mother.recheck ack=held won=route;out=passed@mc:491;branch=none;ledger=+2:all[s=S];\
+window=completed_attempt;deadline_fired=none",
+    "entry=mother.lane.prelock[s=S run=RUN inv=INV];check=mother.admit.ok[s=S run=RUN inv=INV];\
+value=none@mother.lane.prelock ack=held won=route;out=passed@co:719-723;branch=none;\
+ledger=+1:LaneReturned[inv=INV];window=completed_attempt;deadline_fired=none",
 ];
 /// U19c (SB3E-R228): each sink held at its first arrival and released: it
 /// passes, with no refusal note (`branch=none`).
@@ -2332,4 +2388,49 @@ fn tr1_stray_cancel_run(f: &super::Fixture) -> Facts {
     stray.phase = nexus_governed_control::authority::evidence::EvidencePhase::ModelRegistered;
     facts.native.push(stray);
     facts
+}
+/// U20c (SB3E-R243): the acknowledged record point, then on its thread, later,
+/// the admitted `complete`, reached only once the record is written
+/// (host_session/model.rs:1001-1002).
+fn record_written<'a>(v: &View<'a>, point: &str, tag: Tag) -> Option<Seen<'a>> {
+    let a = acked(v, point, tag)?;
+    let done = |e: &Seen| e.s1 && !e.note && e.point == "complete" && e.tick > a.tick;
+    let ours = |e: &Seen| done(e) && e.thread == a.thread && admitted(v, e, tag);
+    v.seen.iter().any(ours).then_some(a)
+}
+/// U20c: the acknowledged point, then on its thread, later (by instant: S1
+/// and S5 tick apart), the Builder's `mother.recheck`, which an unrecorded
+/// attempt does not reach (model_calls.rs:477-491).
+fn rechecked<'a>(v: &View<'a>, point: &str, tag: Tag) -> Option<Seen<'a>> {
+    let a = acked(v, point, tag)?;
+    let re = |e: &Seen| !e.s1 && e.point == "mother.recheck" && e.instant > a.instant;
+    let ours = |e: &Seen| re(e) && e.thread == a.thread && admitted(v, e, tag);
+    v.seen.iter().any(ours).then_some(a)
+}
+/// U20c (R243 finding D): the acknowledged `mother.recheck` and no later
+/// `mother.lane.prelock` of its invocation: the lane did not go on
+/// (coordinator.rs:1972 returns before :1979). This alone does not show the
+/// call was refused; the driver's C1 call result does (s5.rs `late`).
+fn not_live<'a>(v: &View<'a>, point: &str, tag: Tag) -> Option<Seen<'a>> {
+    let a = acked(v, point, tag)?;
+    let on = |e: &Seen| !e.s1 && e.point == "mother.lane.prelock" && e.inv == a.inv;
+    (!v.seen.iter().any(|e| on(e) && e.tick > a.tick)).then_some(a)
+}
+/// U20c: the recheck control's passing form: acknowledged, and the lane went on.
+fn live<'a>(v: &View<'a>, point: &str, tag: Tag) -> Option<Seen<'a>> {
+    let refused = not_live(v, point, tag).is_some();
+    acked(v, point, tag).filter(|_| !refused)
+}
+/// U20c (R243 finding E): after the acknowledged prelock, on its thread, the
+/// admitted `mother.admit` of its invocation, and no later `mother.admit.ok`
+/// of it: only `admit_session` lies between them (coordinator.rs:711-723).
+fn admit_refused<'a>(v: &View<'a>, point: &str, tag: Tag) -> Option<Seen<'a>> {
+    let n = after_ack(v, point, tag)?;
+    let ok = |e: &Seen| !e.s1 && e.point == "mother.admit.ok" && e.inv == n.inv;
+    (!v.seen.iter().any(|e| ok(e) && e.tick > n.tick)).then_some(n)
+}
+/// U20c: the lane control's passing form: that `mother.admit`, admitted.
+fn admit_passed<'a>(v: &View<'a>, point: &str, tag: Tag) -> Option<Seen<'a>> {
+    let refused = admit_refused(v, point, tag).is_some();
+    after_ack(v, point, tag).filter(|_| !refused)
 }

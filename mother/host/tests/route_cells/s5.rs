@@ -49,11 +49,10 @@ fn drive_call(calls: &AtomicU32, context: &LaneContext<'_>) -> bool {
     let schema = ResponseSchema::new(r#"{"type":"object"}"#).unwrap();
     let request = ModelRequest::new("system".into(), "prompt".into(), schema).unwrap();
     calls.fetch_add(1, Ordering::SeqCst);
-    context
-        .model
-        .expect("a model caller")
-        .call(&request)
-        .is_ok()
+    let result = context.model.expect("a model caller").call(&request);
+    let shown = format!("{:?}", result.as_ref().map(|_| ()));
+    CALLS.lock().unwrap().push(shown); // U20c C1: the call's own result.
+    result.is_ok()
 }
 
 /// The Builder: one model call, through `drive_call`. It records its own
@@ -3875,4 +3874,191 @@ fn route_s5_door_ack_binds_the_worker() {
         let elsewhere = door_ack(Some(ack), (s, q, other, ack.thread));
         assert!(elsewhere.is_err(), "door_ack accepted another run");
     });
+}
+// ===== U20c (SB3E-R243): the R7 and R8 sinks, after the chat =====
+// Harness composition until M-5b (R216 F1): the shipped lanes make no model
+// call (hands.rs:172-187, lane.rs:146-148); only `mother.lane.prelock` is
+// reached by the shipped binary (report.rs `admission_order`).
+/// C1 (R194): the Builder's own call results, as `drive_call` records them.
+static CALLS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+/// Each d_call sink's anchor and the S1 points held after it, its own last
+/// (model.rs:502, 513; run.rs:2165-2168); classify and recheck are held on
+/// their own S5 point (adapter/mod.rs:850-853, model_calls.rs:491; W0b A2).
+const LATE_POINTS: [(&str, &str, &[&str]); 5] = [
+    ("attempt_record", CHARGE, &["model.attempt.record.before"]),
+    ("operation_complete", CHARGE, &["complete"]),
+    ("attempt_pin_release", CHARGE, &["model.settle.before"]),
+    ("record_first_classify", "mother.classify", &[]),
+    ("post_record_recheck", "mother.recheck", &[]),
+];
+const CHARGE: &str = "mother.charge.entry";
+/// d_lane's sink and its point (coordinator.rs:1979-1983).
+const LANE: (&str, &str) = ("lane_result_admission", "mother.lane.prelock");
+/// d_lane's refused path: the Builder's call returned and its lane result is
+/// refused at admission: its prelock and `mother.admit` once, no
+/// `mother.admit.ok`, no `mother.lane.returned` (coordinator.rs:711-723).
+fn lane_roles(role: LaneRole) -> Option<[(&'static str, usize); 4]> {
+    match role {
+        LaneRole::Builder => Some([
+            (LANE.1, 1),
+            ("mother.admit", 1),
+            ("mother.admit.ok", 0),
+            ("mother.lane.returned", 0),
+        ]),
+        other => refused_roles(other),
+    }
+}
+const LANE_REFUSED: Expect = Expect {
+    roles: lane_roles,
+    ..RECORDED
+};
+/// U20c: a d_call row past the chat: `value` applied while the sink's own
+/// point is held, the window opening at that acknowledgement. C1: `want` is
+/// the advance's last step, the mission's end and the lane's own call result.
+pub(super) fn after_chat(
+    f: &Fixture,
+    row: (&'static str, &'static str),
+    value: &'static str,
+    want: [&str; 3],
+) -> Facts {
+    late(f, row, (value, None), want)
+}
+/// U20c: d_lane. The advance held at the Builder's own `mother.lane.prelock`
+/// (`prelocked`), `value` applied, or `typed` into production's reader, while
+/// held. C1 as `after_chat`.
+pub(super) fn d_lane(
+    f: &Fixture,
+    row: (&'static str, &'static str),
+    (value, typed): (&'static str, Option<&'static str>),
+    want: [&str; 3],
+) -> Facts {
+    late(f, row, (value, typed), want)
+}
+/// d_lane's hold: S5 pauses a point's first arrival, which is the Sentinel's
+/// prelock, so the hold is re-armed between arrivals (as `Anchor::Arrival`
+/// does for S1) until the acknowledged invocation is the Builder's recorded
+/// one (arrival 6, Step 0 section 3). `apply` runs while that hold stands.
+fn prelocked<R>(m: &Mother, apply: impl FnOnce(Hold, ThreadId) -> R) -> (Vec<Ack>, Vec<String>, R) {
+    let mut held = hold(LANE.1);
+    std::thread::scope(|s| {
+        let advancing = s.spawn(|| m.advance_to_call());
+        let mut arrivals = 0;
+        let ack = loop {
+            let Ok(ack) = held.acknowledged.recv_timeout(PATIENCE) else {
+                panic!("{}: arrival {} not acknowledged", LANE.1, arrivals + 1);
+            };
+            arrivals += 1;
+            let recorded = m.recorded.lock().unwrap().clone();
+            let builder = (LaneRole::Builder, ack.invocation);
+            if recorded.iter().any(|r| (r.0, Some(r.1)) == builder) {
+                break ack;
+            }
+            drop(std::mem::replace(&mut held, hold(LANE.1)));
+        };
+        println!("WITNESS d_lane: the Builder's prelock is arrival {arrivals}");
+        let applied = apply(Hold::S5(held), advancing.thread().id());
+        (vec![Ack::S5(ack)], advancing.join().unwrap(), applied)
+    })
+}
+fn late(
+    f: &Fixture,
+    row: (&'static str, &'static str),
+    (value, typed): (&'static str, Option<&'static str>),
+    want: [&str; 3],
+) -> Facts {
+    let lane = row.0 == LANE.0;
+    let points = LATE_POINTS.iter().find(|p| p.0 == row.0);
+    let (anchor, points): (_, &'static [&'static str]) = match (lane, points) {
+        (true, _) => (LANE.1, &[]),
+        (false, Some(p)) => (p.1, p.2),
+        (false, None) => panic!("late: {} has no point", row.0),
+    };
+    let chain = Chain {
+        row,
+        anchor: Anchor::Mother(anchor),
+        points,
+    };
+    let c = start(f);
+    let apply = |held: Hold, worker: ThreadId| {
+        reopen(); // The window opens at the hold's acknowledgement.
+        let at = Instant::now();
+        let reading = typed.map(|t| (Reading::open(&c.o), t));
+        let keyed = reading.as_ref().map(|(r, t)| r.typed(*t));
+        // U20b's applier (`pressed`, `quit_two`, the state read while held).
+        let mut found = match typed {
+            Some(_) => Vec::new(),
+            None => door_apply(&c.o, value),
+        };
+        let released = at.elapsed();
+        drop(held);
+        if let (Some((r, t)), Some(keyed)) = (reading, keyed) {
+            found.extend(r.close(t, keyed));
+        }
+        if value != "none" {
+            *APPLIED.lock().unwrap() = Some(Instant::now());
+        }
+        if released >= SHUTDOWN_PAUSE {
+            found.push(format!("late: released after {released:?}"));
+        }
+        (worker, found)
+    };
+    let (acks, steps, (worker, mut found)) = match lane {
+        true => prelocked(&c.mother, apply),
+        false => chained(f, &c.mother, &chain, apply),
+    };
+    // F5: a typed value's Stop workers finish before the window is read.
+    if READ.lock().unwrap().is_some() {
+        found.extend(settled(&c.o).err());
+    }
+    let expect = match (value, lane) {
+        ("none", _) => &HELD,
+        (_, true) => &LANE_REFUSED,
+        (_, false) => &REFUSED,
+    };
+    let mut facts = collect((chain.anchor_point(), acks), (row, value), expect);
+    found.into_iter().for_each(|x| later(&mut facts, x));
+    let thread = match facts.acks.last() {
+        Some(Ack::S1(e)) => Some(e.thread),
+        Some(Ack::S5(e)) => Some(e.thread),
+        _ => None,
+    };
+    if thread != Some(worker) {
+        let off = "late: the hold is not on the advancing worker";
+        later(&mut facts, off.into());
+    }
+    // C1 (R194, R243 finding D): the advance's last step, the mission's end
+    // in the window, and the Builder's own call result.
+    let end = mission_end(&facts.journal);
+    let last = steps.last().map_or("none", |s| &**s);
+    let said = std::mem::take(&mut *CALLS.lock().unwrap()).join(",");
+    let shown = |e: &Journaled| format!("{:?}", e.event);
+    let journal: Vec<String> = facts.journal.iter().map(shown).collect();
+    let native: Vec<&str> = facts.native.iter().map(|r| r.phase.as_str()).collect();
+    println!("WITNESS late {value}: steps {steps:?}, end {end}, call {said}");
+    println!("WITNESS late window: journal {journal:?}, native {native:?}");
+    if [last, end.as_str(), said.as_str()] != want {
+        let c1 = format!("the advance ended {last}, the mission {end}, the call {said}");
+        later(&mut facts, format!("late: {c1}, not {want:?}"));
+    }
+    let s = facts.session;
+    let pressed = |e: &&s1::Entry| e.point == "ingress.emergency" && e.session == Some(s);
+    let presses = facts.broker.iter().filter(pressed).count();
+    if value == "repeated" && presses != 2 {
+        let twice = format!("late: {presses} ingress.emergency entries");
+        later(&mut facts, twice);
+    }
+    facts
+}
+
+/// U20c: the production-order control's S5 half (report.rs arms and drains no
+/// S5 itself): drained, the `mother.admit` and `mother.admit.ok` entries of
+/// the held invocation after its acknowledgement, on its thread.
+pub(super) fn admission(ack: &s5::Entry) -> (usize, usize) {
+    let trace = s5::drain_trace();
+    let of = |p: &str| {
+        let ours = |m: &&s5::Entry| m.point == p && m.invocation == ack.invocation;
+        let later = |m: &&s5::Entry| m.thread == ack.thread && m.tick > ack.tick;
+        trace.iter().filter(ours).filter(later).count()
+    };
+    (of("mother.admit"), of("mother.admit.ok"))
 }
