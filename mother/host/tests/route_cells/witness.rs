@@ -43,7 +43,7 @@ const KEYS: [&str; 7] = ["s", "q", "run", "inv", "att", "kind", "ord"];
 type Tag<'t> = (Option<&'t str>, Option<u64>);
 type Predicate = for<'a> fn(&View<'a>, &str, Tag) -> Option<Seen<'a>>;
 type Token = (&'static str, &'static str, Predicate);
-const TOKENS: [Token; 37] = [
+const TOKENS: [Token; 44] = [
     // model.call.observed, then on its thread exactly the note
     // refused:8.cas, with no model.call.admitted of the row's ord.
     ("CAS:m:774", "model.call.observed", |v, _, tag| {
@@ -108,8 +108,8 @@ const TOKENS: [Token; 37] = [
     // the frozen label h:1382-1390 is `SessionDoor::cancel_run`, now h:1400-1419).
     ("h:1382-1390", "door.cancel_run", acked),
     // U20c (SB3E-R243): the R7 and R8 sinks past the chat, each at its
-    // acknowledged point (model.rs:502, 513; run.rs:2165-2168; adapter/mod.rs:
-    // 850-853; model_calls.rs:491). Findings D and E: `note:not_live` and
+    // acknowledged point (model.rs:509, 520; run.rs:2170-2173; adapter/mod.rs:
+    // 850-853; model_calls.rs:497). Findings D and E: `note:not_live` and
     // `note:admit_session` are harness predicates (production writes no such
     // note); `mc:491` and `co:719-723` are their controls' passing forms.
     ("m:470", "model.attempt.record.before", record_written),
@@ -121,6 +121,18 @@ const TOKENS: [Token; 37] = [
     ("mc:491", "mother.recheck", live),
     ("note:admit_session", "mother.admit", admit_refused),
     ("co:719-723", "mother.admit", admit_passed),
+    // SEAM-2, U19d (SB3E-R242): the slot (model.rs:394) and its word note
+    // (:403); the attempt check (run.rs:2144) and its CAS note (:2152; T6,
+    // option C: keyed by the whole branch text, not `note:cas`); the charge
+    // (model_calls.rs:216) and its stale point (:226, an S5 entry, R216.1
+    // F-B2); the settle (:310) with its cleared point (:329, F3).
+    ("m:371-381", "attempt.slot", slot_checked),
+    ("note:slot_word", "attempt:slot_word", after_ack),
+    ("CAS:r:2125", "model.attempt.checked", acked),
+    ("note:cas@r:2125", "attempt:cas", ticket_refused),
+    ("mc:205-250", "mother.charge.entry", acked),
+    ("note:stale", "mother.charge.stale", charge_refused),
+    ("mc:296-300", "mother.settle", settle_cleared),
 ];
 /// U19c (SB3E-R228 S1): the CAS note after the acknowledgement on its thread
 /// (`after_ack`), and no `bind.done` of its run after it there: the refusal
@@ -282,12 +294,16 @@ model.bind.checked|run|authority/run.rs:2330
 bind.done|run|authority/run.rs:2345
 bind:cas|run|authority/run.rs:2335
 door.cancel_run|s q run|host_session.rs:1405; 89-91
-model.settle.before|run att|authority/run.rs:2165-2168
-mother.recheck|s q inv|mother coordinator/model_calls.rs:203-206, 491
+model.settle.before|run att|authority/run.rs:2170-2173
+mother.recheck|s q inv|mother coordinator/model_calls.rs:203-206, 497
 mother.classify|s q run|mother adapter/mod.rs:850-853
 mother.lane.prelock|s q inv|mother coordinator.rs:1979-1983
 mother.admit|s q inv|mother coordinator.rs:711-715
 mother.admit.ok|s q inv|mother coordinator.rs:719-723
+attempt:slot_word|s run|host_session/model.rs:403
+attempt:cas|run att|authority/run.rs:2152
+mother.charge.stale|s q inv|mother coordinator/model_calls.rs:203-206, 226
+mother.settle.cleared|s q inv|mother coordinator/model_calls.rs:203-206, 329
 ";
 /// W0b A1b, A4: `key|points|carrier|source`: the only bindings of a tagged
 /// key a point does not record, each through the observed entry `carrier`
@@ -305,12 +321,15 @@ s|native journal|fixture|the cell's own projection and journal in its window (s5
 s|commit|primary|the end record's S1 commit on the acknowledged close.primary's thread, after it (close.rs:524, 538; evidence_store.rs:1382-1383)
 q|native|bracket:model.record.before,model.install.before|the registration's own entries of S and Q either side of its record (host_session/model.rs:301-314)
 s|model.bind.checked bind.done bind:cas|bindentry|U19c (SB3E-R228): a bind.entry of S and Q earlier on the entry's thread, of its run (host_session/model.rs:565)
-s|model.settle.before|claim|U20c (SB3E-R243): credit's claim of the ticket's run and attempt (authority/run.rs:2167; s5.rs credit, A.3)
-q|model.settle.before model.attempt.record.before complete|gate|U20c: the run's call.gate of S and Q (host_session/model.rs:883, 893-899)
+s|model.settle.before|claim|U20c (SB3E-R243): credit's claim of the ticket's run and attempt (authority/run.rs:2172; s5.rs credit, A.3)
+q|model.settle.before model.attempt.record.before complete|gate|U20c: the run's call.gate of S and Q (host_session/model.rs:890, 900-906)
 inv|model.settle.before model.attempt.record.before complete mother.classify|charge|U20c: the call's mother.charge.entry of the Builder (model_calls.rs:216)
 att|mother.classify|claim|U20c: credit's claim of the classified run (adapter/mod.rs:852; s5.rs credit, A.3)
 run|mother.recheck mother.lane.prelock mother.admit mother.admit.ok|sites|U20c: credit's claim on the Builder's own sites (s5.rs credit, A.3)
 att|mother.recheck|sites|U20c: credit's claim on the Builder's own sites (s5.rs credit, A.3)
+s|model.attempt.checked attempt:cas|bindentry|SEAM-2 (SB3E-R242): the same bind.entry carrier (host_session/model.rs:572)
+q|attempt.slot model.attempt.reserved attempt:slot_word model.attempt.checked attempt:cas|bindentry|SEAM-2 (SB3E-R242): the same bind.entry carrier, for an attempt refused before any call.gate
+inv|attempt.slot model.attempt.reserved attempt:slot_word model.attempt.checked attempt:cas|recheck|SEAM-2 (SB3E-R242): the Builder's mother.recheck of S and Q (model_calls.rs:497), for an attempt refused before its lane's prelock
 ";
 /// The carriers a `CORRELATIONS` row may name, a closed list.
 fn carried(name: &str, v: &View, e: Option<&Seen>) -> bool {
@@ -523,7 +542,7 @@ fn brackets(v: &View, points: &str) -> bool {
 }
 /// Behaviour 10: the controls' witnesses, by `(sink, dim)`, as measured at U5
 /// Step 0 (R86).
-const CONTROLS: [(&str, &str, &str); 30] = [
+const CONTROLS: [(&str, &str, &str); 34] = [
     ("call_chat", "ingress", CONTROL),
     ("close_obligations", "lifecycle", CLOSE_CONTROLS[0]),
     ("delivery", "lifecycle", CLOSE_CONTROLS[1]),
@@ -554,6 +573,10 @@ const CONTROLS: [(&str, &str, &str); 30] = [
     ("record_first_classify", "ingress", LATE_CONTROLS[3]),
     ("post_record_recheck", "ingress", LATE_CONTROLS[4]),
     ("lane_result_admission", "ingress", LATE_CONTROLS[5]),
+    ("call_slot_reserve", "ingress", ATT_CONTROLS[0]),
+    ("attempt_ticket", "ingress", ATT_CONTROLS[1]),
+    ("charge_append", "ingress", ATT_CONTROLS[2]),
+    ("meter_settle", "ingress", ATT_CONTROLS[3]),
 ];
 /// U20c (SB3E-R243): each R7 and R8 sink held at its own point and released:
 /// the call returns `Ok`, the lane's result is admitted (`mother.admit.ok`)
@@ -2391,7 +2414,7 @@ fn tr1_stray_cancel_run(f: &super::Fixture) -> Facts {
 }
 /// U20c (SB3E-R243): the acknowledged record point, then on its thread, later,
 /// the admitted `complete`, reached only once the record is written
-/// (host_session/model.rs:1001-1002).
+/// (host_session/model.rs:1008-1009).
 fn record_written<'a>(v: &View<'a>, point: &str, tag: Tag) -> Option<Seen<'a>> {
     let a = acked(v, point, tag)?;
     let done = |e: &Seen| e.s1 && !e.note && e.point == "complete" && e.tick > a.tick;
@@ -2400,7 +2423,7 @@ fn record_written<'a>(v: &View<'a>, point: &str, tag: Tag) -> Option<Seen<'a>> {
 }
 /// U20c: the acknowledged point, then on its thread, later (by instant: S1
 /// and S5 tick apart), the Builder's `mother.recheck`, which an unrecorded
-/// attempt does not reach (model_calls.rs:477-491).
+/// attempt does not reach (model_calls.rs:483-497).
 fn rechecked<'a>(v: &View<'a>, point: &str, tag: Tag) -> Option<Seen<'a>> {
     let a = acked(v, point, tag)?;
     let re = |e: &Seen| !e.s1 && e.point == "mother.recheck" && e.instant > a.instant;
@@ -2433,4 +2456,59 @@ fn admit_refused<'a>(v: &View<'a>, point: &str, tag: Tag) -> Option<Seen<'a>> {
 fn admit_passed<'a>(v: &View<'a>, point: &str, tag: Tag) -> Option<Seen<'a>> {
     let refused = admit_refused(v, point, tag).is_some();
     after_ack(v, point, tag).filter(|_| !refused)
+}
+
+// ===== SEAM-2, U19d (SB3E-R242): the R3 attempt and R4 meter sinks =====
+/// The controls: each sink held and released with no value. The whole
+/// attempt passes with no refusal record (`branch=none`), measured 10/10.
+const ATT_CONTROLS: [&str; 4] = [
+    "entry=attempt.slot[s=S q=Q run=RUN inv=INV];check=m:371-381[s=S q=Q run=RUN inv=INV];\
+value=none@attempt.slot ack=held won=route;out=passed@m:371-381;branch=none;\
+ledger=+4:all[s=S];window=completed_attempt;deadline_fired=none",
+    "entry=model.attempt.reserved[s=S q=Q run=RUN inv=INV att=ATT];\
+check=CAS:r:2125[s=S q=Q run=RUN inv=INV att=ATT];value=none@model.attempt.checked ack=held won=route;\
+out=passed@CAS:r:2125;branch=none;ledger=+4:all[s=S];window=completed_attempt;deadline_fired=none",
+    "entry=mother.charge.entry[s=S q=Q run=RUN inv=INV att=ATT];\
+check=mc:205-250[s=S q=Q run=RUN inv=INV att=ATT];value=none@mother.charge.entry ack=held won=route;\
+out=passed@mc:205-250;branch=none;ledger=+1:ModelCallCharged[inv=INV];window=completed_attempt;\
+deadline_fired=none",
+    "entry=mother.settle[s=S q=Q run=RUN inv=INV att=ATT];check=mc:296-300[s=S q=Q run=RUN inv=INV att=ATT];\
+value=none@mother.settle ack=held won=route;out=passed@mc:296-300;branch=none;\
+ledger=+3:all[s=S];window=completed_attempt;deadline_fired=none",
+];
+/// The acknowledged slot, then on its thread exactly one of its run's
+/// `model.attempt.reserved` (it passed, model.rs:437) or the word note (it
+/// refused, model.rs:403): a swallowed refusal shows both, a dropped note or
+/// an unrecorded disjunct neither.
+fn slot_checked<'a>(v: &View<'a>, point: &str, tag: Tag) -> Option<Seen<'a>> {
+    let a = acked(v, point, tag)?;
+    let after = |p: &str| {
+        let later = |e: &&Seen| e.s1 && e.point == p && e.thread == a.thread && e.tick > a.tick;
+        v.seen.iter().filter(later).any(|e| e.run == a.run)
+    };
+    (after("model.attempt.reserved") != after("attempt:slot_word")).then_some(a)
+}
+/// F2 (soundness): the CAS note after the acknowledgement on its thread, and
+/// after it no `call.gate` and no `model.attempt.record.before` of its run: a
+/// swallowed refusal runs on to the attempt's record with no gate.
+fn ticket_refused<'a>(v: &View<'a>, point: &str, tag: Tag) -> Option<Seen<'a>> {
+    let n = after_ack(v, point, tag)?;
+    let ran = ["call.gate", "model.attempt.record.before"];
+    let on = |e: &&Seen| e.s1 && ran.contains(&e.point) && e.run == n.run && e.tick > n.tick;
+    (!v.seen.iter().any(|e| on(&e))).then_some(n)
+}
+/// The stale point after the acknowledged charge on its thread, and after it
+/// no `mother.charge` of its invocation: the refusal returned.
+fn charge_refused<'a>(v: &View<'a>, point: &str, tag: Tag) -> Option<Seen<'a>> {
+    let n = after_ack(v, point, tag)?;
+    let went = |e: &&Seen| !e.s1 && e.point == "mother.charge" && e.inv == n.inv && e.tick > n.tick;
+    (!v.seen.iter().any(|e| went(&e))).then_some(n)
+}
+/// F3 (soundness): the acknowledged settle, then on its thread its
+/// invocation's admitted `mother.settle.cleared`: the flight was cleared.
+fn settle_cleared<'a>(v: &View<'a>, point: &str, tag: Tag) -> Option<Seen<'a>> {
+    let a = acked(v, point, tag)?;
+    let done = |e: &&Seen| !e.s1 && e.point == "mother.settle.cleared" && admitted(v, e, tag);
+    let ours = |e: &&Seen| done(e) && e.thread == a.thread && e.inv == a.inv && e.tick > a.tick;
+    v.seen.iter().any(|e| ours(&e)).then_some(a)
 }

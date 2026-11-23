@@ -9,8 +9,9 @@
 // R0 registration_install and 32 R5 metadata-gate cells (SB3E-R216) and
 // U19b-2's 36 R5 call cells refused at ords 1-3 (SB3E-R217), U20b's twelve
 // R6 cancel_run cells (SB3E-R226), U19c's three R1 identity_view and two
-// R2 inference_binding cells (SB3E-R228) and U20c's 17 R7 and 14 R8 cells
-// (SB3E-R243). The route_cells lane compiles it through
+// R2 inference_binding cells (SB3E-R228), U20c's 17 R7 and 14 R8 cells
+// (SB3E-R243) and SEAM-2's 30 R3 attempt and R4 meter cells (SB3E-R242).
+// The route_cells lane compiles it through
 // `macro_rules! cells` in main.rs, whose terminal arm is the control
 // `ctl_call_chat`; session_model_bridge.rs and check-citations.py parse it
 // as text. One entry per credited cell: `<route> <sink> <dim> <value>;`
@@ -221,4 +222,34 @@ cells! {
     r8 lane_result_admission lifecycle ClosingRestricted;
     r8 post_record_recheck ingress repeated;
     r8 record_first_classify ingress repeated;
+    r3 attempt_ticket ingress repeated;
+    r3 attempt_ticket ingress quit;
+    r3 attempt_ticket lifecycle Emergency;
+    r3 attempt_ticket lifecycle Failed;
+    r3 attempt_ticket lifecycle ClosingNormal;
+    r3 attempt_ticket lifecycle ClosingRestricted;
+    r3 call_slot_reserve ingress repeated;
+    r3 call_slot_reserve ingress quit;
+    r3 call_slot_reserve lifecycle Emergency;
+    r3 call_slot_reserve lifecycle Failed;
+    r3 call_slot_reserve lifecycle ClosingNormal;
+    r3 call_slot_reserve lifecycle ClosingRestricted;
+    r4 charge_append ingress CR;
+    r4 charge_append ingress LF;
+    r4 charge_append ingress CRLF;
+    r4 charge_append ingress EOF;
+    r4 charge_append ingress partial_Ctrl_D;
+    r4 charge_append ingress master_close;
+    r4 charge_append ingress repeated;
+    r4 charge_append ingress quit;
+    r4 charge_append lifecycle Emergency;
+    r4 charge_append lifecycle Failed;
+    r4 charge_append lifecycle ClosingNormal;
+    r4 charge_append lifecycle ClosingRestricted;
+    r4 meter_settle ingress repeated;
+    r4 meter_settle ingress quit;
+    r4 meter_settle lifecycle Emergency;
+    r4 meter_settle lifecycle Failed;
+    r4 meter_settle lifecycle ClosingNormal;
+    r4 meter_settle lifecycle ClosingRestricted;
 }

@@ -306,7 +306,7 @@ delivery|sb3_mother_post_seal_model_events_are_absent
 /// the verifier compares them. It shows consistency, not that a test ran.
 const CELLS_RS: &str = include_str!("route_cells/cells.rs");
 const EXPECT: &str = include_str!("session/model-bridge-expect.tsv");
-const EXPECT_SHA256: &str = "0e90624214de6d57b72620dadcd69883589db793b12a4bf6d50c67d310065c99";
+const EXPECT_SHA256: &str = "dfc98814c6e58eac12213ac6145dcc26e4ad7e08624c48795e09493e3c6e8db1";
 const UNIVERSE_SHA256: &str = "a6a5337538a92d273dd2efdcaedcf76843bbf2f3ddc6be1f6f44f3c241985fd2";
 const EXPECT_HEADER: &str = "route\tsink\tdim\tvalues\tmech\tsetup\tdriver\tentry\tcheck\texit\texec\tapply\texpect\twitness\tcontrol\tplant\trefs\tstatus";
 /// R4: `reader:` is these literal bytes, or one of the three closed paths.
@@ -321,7 +321,7 @@ const BYTE_APPLY: [(&str, &str); 7] = [
 ];
 /// R5.3: which identity keys a driver's trace entries carry (design 2.3).
 const DRIVER_KEYS: &str = "d_register=s,q d_bootstrap=s d_identity=s,q d_bind=s,run \
-    d_call=s,q,run,inv,att d_lane=s,run,inv d_cancel=s,run d_halt=s d_stop=s d_quit=s,q \
+    d_call=s,q,run,inv,att d_call@call_slot_reserve=s,q,run,inv d_lane=s,run,inv d_cancel=s,run d_halt=s d_stop=s d_quit=s,q \
     d_close=s host=s";
 /// Real S2/shim record selectors (design 4.2.1); `none` is not one.
 const RECORDS: &str = "model_registered model_call";
@@ -568,10 +568,16 @@ fn gate_ordinal(sink: &str) -> Option<(&str, usize)> {
 /// The exact identity the row's driver must show: symbolic variables, bound at
 /// run time, the same in every field; a `g:` execution has its own binding.
 fn expected_identity(row: &[String]) -> Result<String, String> {
-    let (_, keys) = words(DRIVER_KEYS)
-        .into_iter()
-        .filter_map(|e| e.split_once('='))
-        .find(|(d, _)| *d == row[6])
+    // SEAM-2 T1 (SB3E-R242): a `driver@sink` key set, when listed, is the row's.
+    let own = format!("{}@{}", row[6], row[1]);
+    let sets = || {
+        words(DRIVER_KEYS)
+            .into_iter()
+            .filter_map(|e| e.split_once('='))
+    };
+    let (_, keys) = sets()
+        .find(|(d, _)| *d == own)
+        .or_else(|| sets().find(|(d, _)| *d == row[6]))
         .ok_or_else(|| format!("{}: wrong driver {}", row[1], row[6]))?;
     let group = row[10].strip_prefix("g:");
     let mut parts: Vec<String> = keys
@@ -2109,13 +2115,13 @@ fn sb3d_r3_d1_cells_are_executed_or_owned() {
             count("open:F1"),
             count("open:M2e-D")
         ),
-        (250, 0, 515, 1, 28),
-        "after D2, U5b's six, U9a's eleven, U6a-1's three, U9b's five, SEAM-1's seven, U19a's 40, U21a's five, U19b-1's 44, U19b-2's 36, U20b's 12, U19c's five and U20c's 31 credited cells: {summary:?}"
+        (280, 0, 490, 1, 28),
+        "after D2, U5b's six, U9a's eleven, U6a-1's three, U9b's five, SEAM-1's seven, U19a's 40, U21a's five, U19b-1's 44, U19b-2's 36, U20b's 12, U19c's five, U20c's 31 and SEAM-2's 30 credited cells: {summary:?}"
     );
     assert_eq!(
         count("cited"),
-        156,
-        "quit, fatal, six U9a cells, SEAM-1's primary_end SealedFinalizing, U19a's 534-537, 86-88, 665 and 417-419, U19b-1's 653, 405-407, 453-455, 465-467, 477-479 and 489-491, and U19b-2's 120-122, 133, 137-139, 150, 154-156, 167, 547-550, 552-555 and 557-560, and U20c's 48, 65, 519-522 and 524-527 moved to x:rc_"
+        151,
+        "quit, fatal, six U9a cells, SEAM-1's primary_end SealedFinalizing, U19a's 534-537, 86-88, 665 and 417-419, U19b-1's 653, 405-407, 453-455, 465-467, 477-479 and 489-491, and U19b-2's 120-122, 133, 137-139, 150, 154-156, 167, 547-550, 552-555 and 557-560, U20c's 48, 65, 519-522 and 524-527, and SEAM-2's 82 and 529-532 moved to x:rc_"
     );
 }
 
@@ -2133,7 +2139,10 @@ fn sb3d_r3_d1_cells_are_executed_or_owned() {
 /// identity_view and two inference_binding cells. U20c (SB3E-R243): 17 R7 cells
 /// (attempt_record, attempt_pin_release, operation_complete) and 14 R8 cells
 /// (lane_result_admission, post_record_recheck, record_first_classify).
-const CREDITED: [&str; 205] = [
+/// SEAM-2 (SB3E-R242): six
+/// call_slot_reserve, six attempt_ticket, twelve charge_append and six
+/// meter_settle cells.
+const CREDITED: [&str; 235] = [
     "r5/call_chat/ingress/original_cell_unscheduled",
     "r5/call_chat/ingress/repeated",
     "r5/call_chat/ingress/mission_stop",
@@ -2339,6 +2348,36 @@ const CREDITED: [&str; 205] = [
     "r8/lane_result_admission/lifecycle/ClosingRestricted",
     "r8/post_record_recheck/ingress/repeated",
     "r8/record_first_classify/ingress/repeated",
+    "r3/attempt_ticket/ingress/repeated",
+    "r3/attempt_ticket/ingress/quit",
+    "r3/attempt_ticket/lifecycle/Emergency",
+    "r3/attempt_ticket/lifecycle/Failed",
+    "r3/attempt_ticket/lifecycle/ClosingNormal",
+    "r3/attempt_ticket/lifecycle/ClosingRestricted",
+    "r3/call_slot_reserve/ingress/repeated",
+    "r3/call_slot_reserve/ingress/quit",
+    "r3/call_slot_reserve/lifecycle/Emergency",
+    "r3/call_slot_reserve/lifecycle/Failed",
+    "r3/call_slot_reserve/lifecycle/ClosingNormal",
+    "r3/call_slot_reserve/lifecycle/ClosingRestricted",
+    "r4/charge_append/ingress/CR",
+    "r4/charge_append/ingress/LF",
+    "r4/charge_append/ingress/CRLF",
+    "r4/charge_append/ingress/EOF",
+    "r4/charge_append/ingress/partial_Ctrl_D",
+    "r4/charge_append/ingress/master_close",
+    "r4/charge_append/ingress/repeated",
+    "r4/charge_append/ingress/quit",
+    "r4/charge_append/lifecycle/Emergency",
+    "r4/charge_append/lifecycle/Failed",
+    "r4/charge_append/lifecycle/ClosingNormal",
+    "r4/charge_append/lifecycle/ClosingRestricted",
+    "r4/meter_settle/ingress/repeated",
+    "r4/meter_settle/ingress/quit",
+    "r4/meter_settle/lifecycle/Emergency",
+    "r4/meter_settle/lifecycle/Failed",
+    "r4/meter_settle/lifecycle/ClosingNormal",
+    "r4/meter_settle/lifecycle/ClosingRestricted",
 ];
 /// U5b: `manifest` with the six credited entries first, for a control whose
 /// register keeps the real one's six `x:rc_` cells (each control's own
