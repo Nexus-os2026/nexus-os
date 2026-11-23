@@ -144,8 +144,8 @@ const PORT_USES: &str = "\
 /// `#[path]` site of Mother's sources (G-S1).
 const PIN_DATA: &str = include_str!("route_seams_guard.pins");
 /// SB3E-R42.3 (G-S2): the pins file's sha256 and the sweep's exact count.
-const PINS_SHA256: &str = "085946eaef1db023decdf0b4c026c72c98aebe0968e82c189e69610a0c3b0ca3";
-const MUTANTS: usize = 1848;
+const PINS_SHA256: &str = "969c60cdd09b7153a25e30170549153648af7c78de0beaa0444f5cb062c44275";
+const MUTANTS: usize = 2754;
 const REGIONS: usize = 38;
 /// SB3E-R51.1: every file of the harness directory, byte for byte, exactly
 /// this list (`name sha256`): the authority for all of `route_cells`, `s5.rs`
@@ -154,21 +154,24 @@ const REGIONS: usize = 38;
 /// advisory layer.
 const CELLS: &str = "host/tests/route_cells/";
 const ROUTE_CELLS: &str = "\
-cells.rs a96c7577e8e9fa07401cf4004468027f97ea7681216e2330788e55d8dd6e9040
+cells.rs f921cf09f6944783b759789d48695b69715081a378fc14b38fc586fce6f59b0e
 grant.rs fbe4c4b9dc43dc86c77ed4ec9c09f8bf9ea61dc8091b8ed1866a847a99e27be4
 locks.rs 9b82f75d8ad4f2d0c47194c69be15187dd3f96291033b3a57a4105bc731ccf78
-main.rs 898d35e35d308cbf920923e67f70575298ddd5d7f13c60c7b60a422c883005f2
-reader.rs 6afe8594053ce320a954501ab429d78c48e0cd6c85387e8ddb4d73ddb6ef86f6
+main.rs 44036c7f137efcd949e81bc80600fb18bb81ccc9cc9c07888bd89dd188dcfb44
+reader.rs f0e072b6911653d806059786c6b9c822a908d0b6dbdad832c03ffbec4c7fe66b
 route_read.c 05fa04a9a933dacf5c4d4a93776e695da0c885dfebba857751f16cb7f14c6b4b
 route_fsync.c 6166fe8b9eee2e9c2a84a8bcbfcc1590f14de97d7bb0d60084da674a56f0e973
-s5.rs c776bdbd6f224768de4e8a6c4ab140e005cb5999fdf4cbf952d50cca232a35c0
+s5.rs 13ac2c672911a296bea11125602eedefd15eadca06af86077a3a8f4d94401ed0
 s5_close.rs 6127e5b54a2032998559214f4ef6efb8f7d9d765d6c55097367a386423434a0a
-s5_reg.rs d12c3d1eeef6cbc58c620fa7648edf6dba3fdd28a06a419263b8dfa45b743a43
+s5_door.rs 323413cba0602e50146257de8146f162322a8678e97e80e932a06656864a8f5c
+s5_reg.rs 14561ee08b9feb518d8d61901f075c2f80b2dd7af465a09c6537ef055f4009a0
+s5_call_b.rs 2d7e695e5e214bf07d644db6c525b7216003e31e73d26ba6871fed0894f4e271
+s5_ident.rs d467c2f963694c2a603b0cce39c413bf8709c230b5ad426b3fb4f9ab27d2f966
 s5_r6.rs 42217130763f956fa59dbc92830b833a9321ca1cbfd55b269fe3d82211f2efea
 s5_r34.rs 904e02d28e2f6752fe94f45e0ebc3b8a3558759e45a440c5dc3f372541a008a5
-witness.rs 786096b6179650fbe7b83a09a0e25e82a51bbc6547167944d0ece51163214b7a
+witness.rs 2c85b754bb96f19b8d89d4c8f4d99a486f23815746da0404483d68e183d6e2da
 store.rs 0dabb6132cfc184a99b4627b983226cdef3390785c8e60daa189bba5bc737b00
-report.rs 7340ef6e54425d9655e70be86370e09d0db18615236c02a73655b272089423fd
+report.rs d96fbb59efebba3d63f09581d0eaf1085e98c63d8da898dc812f88102268f587
 s5_report.rs fed9e772fe9f00880077ca56f4a229742208bcdd904314cf5126fc91ba7166c9
 ";
 fn route_cells() -> impl Iterator<Item = (&'static str, &'static str)> {
@@ -184,7 +187,10 @@ fn route_cells() -> impl Iterator<Item = (&'static str, &'static str)> {
 const S5_SECTIONS: &str = "\
 s5.rs|U5|call_chat:ingress,call_chat:lifecycle|ctl_call_chat|S5_SUPER|-
 s5_close.rs|U9a|close_obligations:lifecycle,delivery:lifecycle,mother_end:lifecycle,primary_end:lifecycle,producer_join:lifecycle,seal:lifecycle|ctl_close_obligations,ctl_delivery,ctl_mother_end,ctl_primary_end,ctl_producer_join,ctl_seal|super::s5::closed,super::s5::Close,super::s5::Facts,super::s5::Mode,super::s5::Setup,super::Fixture,nexus_governed_control::host_session::close::CloseSeal,nexus_governed_control::host_session::SessionRequest|-
-s5_reg.rs|U6a-1|registration_reserve:ingress,registration_record:ingress,registration_install:ingress,registration_readiness:ingress,registration_reserve:lifecycle,registration_record:lifecycle,registration_readiness:lifecycle|ctl_registration_reserve,ctl_registration_record,ctl_registration_install,ctl_registration_readiness|super::s5::read_registered,super::s5::registered,super::s5::Facts,super::Fixture|-
+s5_door.rs|U20b|cancel_run:ingress,cancel_run:lifecycle|ctl_cancel_run|super::s5::d_cancel,super::s5::Facts,super::Fixture|-
+s5_reg.rs|U6a-1|registration_reserve:ingress,registration_record:ingress,registration_install:ingress,registration_readiness:ingress,registration_reserve:lifecycle,registration_record:lifecycle,registration_readiness:lifecycle,registration_install:lifecycle,registration_version:ingress,registration_status:ingress,registration_tags:ingress,registration_show:ingress|ctl_registration_reserve,ctl_registration_record,ctl_registration_install,ctl_registration_readiness,ctl_registration_version,ctl_registration_status,ctl_registration_tags,ctl_registration_show|super::s5::read_registered,super::s5::registered,super::s5::Facts,super::Fixture|-
+s5_call_b.rs|U19b-2|call_version:ingress,call_version:lifecycle,call_status:ingress,call_status:lifecycle,call_tags:ingress,call_tags:lifecycle|ctl_call_version,ctl_call_status,ctl_call_tags|super::s5::called,super::s5::read_called,super::s5::Facts,super::Fixture|-
+s5_ident.rs|U19c|identity_view:ingress,identity_view:lifecycle,inference_binding:ingress|ctl_identity_view,ctl_inference_binding|super::s5::identified,super::s5::Facts,super::Fixture|-
 s5_r34.rs|U6b-2|attempt_ticket:ingress,call_slot_reserve:ingress,charge_append:ingress,meter_settle:ingress|ctl_attempt_ticket,ctl_call_slot_reserve,ctl_charge_append,ctl_meter_settle|-|-
 s5_r6.rs|U9b|close_restrict:lifecycle,emergency_restrict:lifecycle|ctl_close_restrict,ctl_emergency_restrict|super::s5::closed,super::s5::Close,super::s5::Facts,super::s5::Mode,super::s5::Setup,super::Fixture|-
 s5_report.rs|U21a|close_report:lifecycle,close_report:fault,close_report:schedule|ctl_close_report|super::report::reached,super::report::Hold,super::report::Owner,super::s5::collect_report,super::s5::Facts,super::Fixture|-
@@ -262,7 +268,7 @@ const MANIFESTS: [(&str, &str); 2] = [
 /// SB3E-R44.2: `main.rs`'s top-level items (`items`), one per line (one
 /// `:` escaped, so the host-access scan does not match this file).
 const MAIN_ITEMS: &str = "\
-#![cfg(all(target_os=linux,mother_route_seams))]#![deny(unsafe_code)]usenexus_governed_control::authority::approval::*;\n\
+#![cfg(all(target_os=linux,mother_route_seams))]#![deny(unsafe_code)]#![recursion_limit=256]usenexus_governed_control::authority::approval::*;\n\
 usenexus_governed_control::authority::clock::SystemClock;\n\
 usenexus_governed_control::authority::ids::RunId;\n\
 usenexus_governed_control::broker::route_seams::{arm,drain_trace,Action,Entry,Held};\n\
@@ -284,7 +290,10 @@ modlocks;\n\
 modreader;\n\
 modreport;\n\
 mods5;\n\
+mods5_call_b;\n\
 mods5_close;\n\
+mods5_door;\n\
+mods5_ident;\n\
 mods5_r34;\n\
 mods5_r6;\n\
 mods5_reg;\n\
@@ -1071,6 +1080,8 @@ fn inventory_findings(sources: &[(String, String)]) -> Vec<String> {
     more.extend(t7_findings(sources));
     more.extend(reader_timeout_findings(text(sources, READER)));
     more.extend(order_findings(text(sources, "host/src/hands.rs")));
+    more.extend(close_caller_findings(sources));
+    more.extend(door_caller_findings(sources));
     for finding in more {
         check(false, finding);
     }
@@ -1131,6 +1142,354 @@ fn order_findings(hands: &str) -> Vec<String> {
         if !ok {
             found.push(format!("order: {what}"));
         }
+    }
+    found
+}
+/// U20a (SB3E-R214, R214.2-3; docs 14.19 O1-O3): every production occurrence of
+/// the close sinks' callees and, one level up (S1), of their callers, as
+/// `file|enclosing fn|callee[*count]`, over tokens (a comment or literal is not
+/// one; same-named locals and fields count too). R9: only `Runtime::close` on
+/// hands-close; R6 and Stop: only the reader thread's `read_input`.
+const CLOSE_CALLERS: &str = "\
+host/src/hands.rs|close|settle_close_resources
+host/src/hands.rs|close|seal_close
+host/src/hands.rs|close_report|close_obligations
+host/src/hands.rs|close|close_report*2
+host/src/hands.rs|run|close*9
+host/src/hands.rs|-|close*2
+host/src/hands.rs|run|close_report*3
+host/src/stop.rs|press|emergency
+src/coordinator.rs|advance|emergency*2
+host/src/terminal.rs|receive|accept*2
+host/src/terminal.rs|receive|press*2
+host/src/terminal.rs|read_input|press*2
+host/src/terminal.rs|goal_line|receive*3
+host/src/terminal.rs|route_read|receive*2
+host/src/terminal.rs|read_input|receive
+host/src/terminal.rs|route_read|goal_line
+host/src/terminal.rs|-|goal_line
+host/src/terminal.rs|goal_begin|goal_line
+host/src/terminal.rs|goal_end|goal_line
+host/src/terminal.rs|publish_goal|goal_line
+host/src/terminal.rs|read_goal_inner|goal_line
+host/src/terminal.rs|read_input|route_read
+host/src/terminal.rs|open|read_input
+";
+/// Each callee: clause, where it is visible (all of Mother if empty) and the file that
+/// keeps it that narrow (stop.rs:88; terminal.rs:313, :516, :1303, :1389; hands.rs:721, :757).
+const GUARDED: [(&str, &str, &str, &str); 12] = [
+    ("close_obligations", "(a)", "", ""),
+    ("settle_close_resources", "(a)", "", ""),
+    ("seal_close", "(a)", "", ""),
+    ("close", "(a)", "host/src/hands", "host/src/hands.rs"),
+    ("close_report", "(a)", "host/src/hands", "host/src/hands.rs"),
+    ("accept", "(b)", "", ""),
+    ("emergency", "(b)", "", ""),
+    ("press", "(c)", "host/src/", "host/src/stop.rs"),
+    ("receive", "(c)", "host/src/", "host/src/terminal.rs"),
+    ("goal_line", "(c)", "host/src/", "host/src/terminal.rs"),
+    ("route_read", "(c)", "host/src/", "host/src/terminal.rs"),
+    (
+        "read_input",
+        "(c)",
+        "host/src/terminal",
+        "host/src/terminal.rs",
+    ),
+];
+/// Not production (R214.2 S3, exact paths; (e) keeps the legacy modules off the shipped
+/// path), beside the modules declared under `#[cfg(test)]` and their files. The
+/// `src/adapter/` files are test modules loaded by `#[path]` (R214.3 D2): adapter/lite.rs:331
+/// (lite.rs is test-only, adapter/mod.rs:1346-1347); coordinator/lite.rs:62, :87, :92, :102,
+/// :470; private_file.rs:283; session_close_oracles_tests.rs:194, :196.
+const CALLER_EXCLUDED: &str =
+    "host/tests/ host/examples/ desktop/tests/ host/src/legacy_terminal.rs \
+host/src/legacy_stop.rs src/adapter/lite_review2_mixed.rs src/adapter/lite_review3.rs \
+src/adapter/session_continuation_oracles_tests.rs src/adapter/session_close_oracles_tests.rs \
+src/adapter/session_budget_fix1_tests.rs src/adapter/session_terminal_fix2_tests.rs \
+src/adapter/private_session_oracles_tests.rs src/adapter/session_lifecycle_fix1_tests.rs \
+src/adapter/session_native_record_fix1_tests.rs";
+/// Clause (e): the shipped host files, and `lib.rs` but for its `mod` lines.
+const SHIPPED: &str =
+    "host/src/bin/ host/src/hands.rs host/src/terminal.rs host/src/stop.rs host/src/lib.rs";
+fn caller_excluded(file: &str, test_mods: &[String]) -> bool {
+    let named = |e: &&str| file == *e || e.ends_with('/') && file.starts_with(e);
+    CALLER_EXCLUDED.split_whitespace().any(|e| named(&e))
+        || test_mods
+            .iter()
+            .any(|m| file == format!("{m}.rs") || file.starts_with(&format!("{m}/")))
+}
+/// `#[cfg(test)]` at `t[i..]`.
+fn cfg_test(t: &[&str], i: usize) -> bool {
+    t.get(i..i + 7) == Some(&["#", "[", "cfg", "(", "test", ")", "]"][..])
+}
+/// The modules a file declares under `#[cfg(test)]` at their default path
+/// (R214.3 D2: a `#[path]` module is not followed; a test module loaded that way
+/// is named in `CALLER_EXCLUDED`).
+fn test_mods(lexed: &[(&str, Vec<&str>)]) -> Vec<String> {
+    let mut found = Vec::new();
+    for (file, t) in lexed {
+        let stem = file.strip_suffix(".rs").unwrap_or(file);
+        let root = ["/mod", "/lib", "/main"].iter().any(|e| stem.ends_with(e));
+        let parent = if root {
+            stem.rsplit_once('/').map_or("", |p| p.0)
+        } else {
+            stem
+        };
+        let (mut test, mut path) = (false, false);
+        for i in 0..t.len() {
+            let open = !matches!(t[i], ";" | "{" | "}");
+            test = (test || cfg_test(t, i)) && open;
+            path = (path || t[i] == "path" && t.get(i + 1) == Some(&"=")) && open;
+            if test && !path && t[i] == "mod" && t.get(i + 2) == Some(&";") {
+                found.push(format!("{parent}/{}", t[i + 1]));
+            }
+        }
+    }
+    found
+}
+/// Each non-test occurrence in `t` of a guarded callee as `(enclosing fn,
+/// callee)`. R214.3 D1: every occurrence counts (a call, a method value, a
+/// `use` alias), but for the callee's own `fn` definition.
+fn close_calls<'a>(file: &str, t: &[&'a str]) -> Vec<(&'a str, &'a str)> {
+    let guarded = |i: usize| {
+        let called = i > 0 && t[i - 1] != "fn";
+        called && GUARDED.iter().any(|g| g.0 == t[i] && file.starts_with(g.2))
+    };
+    let found = production_sites(t, guarded).into_iter();
+    found.map(|(within, i)| (within, t[i])).collect()
+}
+/// Each non-test token of `t` that `pick` takes, as `(enclosing fn, index)`
+/// (U20b: `close_calls`' walk, shared by `door_calls`). A pending
+/// `#[cfg(test)]` ends at its item's `;`, block or `}`, and (S4) at a `,`,
+/// `)` or `]` of its own level.
+fn production_sites<'a>(t: &[&'a str], pick: impl Fn(usize) -> bool) -> Vec<(&'a str, usize)> {
+    let (mut found, mut stack) = (Vec::new(), Vec::<(Option<&str>, bool)>::new());
+    let (mut name, mut test, mut depth, mut skip) = (None, false, 0usize, 0);
+    for i in 0..t.len() {
+        if cfg_test(t, i) {
+            (test, depth, skip) = (true, 0, i + 7);
+        }
+        if i < skip {
+            continue;
+        }
+        match t[i] {
+            "fn" => {
+                name = t
+                    .get(i + 1)
+                    .copied()
+                    .filter(|n| n.starts_with(char::is_alphabetic))
+            }
+            "{" => {
+                stack.push((name.take(), test));
+                test = false;
+            }
+            "}" | ";" => {
+                if t[i] == "}" {
+                    stack.pop();
+                }
+                (name, test) = (None, false);
+            }
+            "(" | "[" if test => depth += 1,
+            ")" | "]" | "," if test && depth == 0 => test = false,
+            ")" | "]" if test => depth -= 1,
+            _ => {}
+        }
+        if pick(i) && !test && !stack.iter().any(|s| s.1) {
+            found.push((stack.iter().rev().find_map(|s| s.0).unwrap_or("-"), i));
+        }
+    }
+    found
+}
+fn close_caller_findings(sources: &[(String, String)]) -> Vec<String> {
+    let lexed: Vec<(&str, Vec<&str>)> = sources
+        .iter()
+        .filter(|(_, s)| tokens(s).is_ok())
+        .map(|(f, s)| (f.as_str(), lex(s)))
+        .collect();
+    let mods = test_mods(&lexed);
+    let mut rows = Vec::new();
+    for (file, t) in lexed.iter().filter(|(f, _)| !caller_excluded(f, &mods)) {
+        let found = close_calls(file, t).into_iter();
+        rows.extend(found.map(|(within, callee)| format!("{file}|{within}|{callee}")));
+    }
+    let clause = |row: &str| {
+        let callee = row.rsplit('|').next();
+        GUARDED
+            .iter()
+            .find(|g| Some(g.0) == callee)
+            .map_or("?", |g| g.1)
+    };
+    let count = |l: &'static str| {
+        l.split_once('*')
+            .map_or((l, 1), |(r, n)| (r, n.parse().unwrap_or(0)))
+    };
+    let listed = CLOSE_CALLERS.lines().map(count);
+    let mut listed: Vec<&str> = listed
+        .flat_map(|(r, n)| std::iter::repeat_n(r, n))
+        .collect();
+    let mut found = Vec::new();
+    for row in &rows {
+        match listed.iter().position(|l| l == row) {
+            Some(at) => {
+                listed.remove(at);
+            }
+            None => found.push(format!("close callers {}: unlisted {row}", clause(row))),
+        }
+    }
+    found.extend(
+        listed
+            .iter()
+            .map(|l| format!("close callers {}: missing {l}", clause(l))),
+    );
+    // S1: a scoped callee stays as narrow as its scope: one `fn`, not `pub`
+    // (nor `pub(..)` when its scope is one module).
+    for (callee, which, scope, definer) in GUARDED.iter().filter(|g| !g.3.is_empty()) {
+        let t = lexed
+            .iter()
+            .find(|(f, _)| f == definer)
+            .map_or(&[][..], |x| &x.1[..]);
+        let defs: Vec<usize> = (1..t.len())
+            .filter(|&i| t[i - 1] == "fn" && t[i] == *callee)
+            .collect();
+        let lead = |i: usize| {
+            (0..i - 1)
+                .rev()
+                .find(|&k| !["const", "async", "unsafe"].contains(&t[k]))
+        };
+        let narrow = |&i: &usize| {
+            lead(i).is_some_and(|k| t[k] != "pub" && (scope.ends_with('/') || t[k] != ")"))
+        };
+        if defs.len() != 1 || !defs.iter().all(narrow) {
+            found.push(format!(
+                "close callers {which}: {definer} widens fn {callee}"
+            ));
+        }
+    }
+    // (d): U21a's O1 rule itself, not a copy of it.
+    let hands = sources.iter().find(|(f, _)| f == "host/src/hands.rs");
+    let order = hands.map_or_else(
+        || vec!["no host/src/hands.rs".into()],
+        |h| order_findings(&h.1),
+    );
+    let kept = [
+        "no host/src/hands.rs",
+        "does not tokenize",
+        "the reader is not",
+    ];
+    let reader = order.iter().filter(|o| kept.iter().any(|k| o.contains(k)));
+    found.extend(reader.map(|o| format!("close callers (d): {o}")));
+    // (e) (R214.2 S3): no shipped file uses any `legacy_*` module.
+    for (file, t) in lexed
+        .iter()
+        .filter(|(f, _)| SHIPPED.split(' ').any(|s| f.starts_with(s)))
+    {
+        for (i, w) in t.iter().enumerate() {
+            let modded = *file == "host/src/lib.rs" && i > 0 && t[i - 1] == "mod";
+            if w.starts_with("legacy_") && !modded {
+                found.push(format!("close callers (e): {file} uses {w}"));
+            }
+        }
+    }
+    found
+}
+/// U20b (SB3E-R226 F-B, R231 S1; docs 14.22): every production `halt` and `fence` identifier
+/// but its own `fn` (R214.3 D1), `file|fn|callee`, with U20a's scoping. `PortDoor::halt`
+/// (adapter/session_port.rs:127-130), from `locked`'s poison arm (adapter/mod.rs:376) and
+/// `fence` (:895); hands.rs `close_report`'s four `o.halt.*` fields (:804). The port's `fence`
+/// (session_port.rs:447) through the coordinator's closure field (coordinator.rs:570, 1119),
+/// invoked at :763 only; and three `#[path]` test modules (coordinator/lite.rs:67, :72, :82)
+/// that `CALLER_EXCLUDED` does not name.
+const DOOR_CALLERS: &str = "\
+src/adapter/session_port.rs|halt|halt
+src/adapter/session_port.rs|halt|halt
+src/adapter/mod.rs|locked|halt
+src/adapter/mod.rs|fence|halt
+host/src/hands.rs|close_report|halt
+host/src/hands.rs|close_report|halt
+host/src/hands.rs|close_report|halt
+host/src/hands.rs|close_report|halt
+src/adapter/session_port.rs|fence|fence
+src/coordinator.rs|-|fence
+src/coordinator.rs|open|fence
+src/coordinator.rs|open|fence
+src/coordinator.rs|write_record|fence
+src/adapter/lite_review4.rs|terminal_pair|fence
+src/adapter/lite_review5.rs|run_case|fence
+src/adapter/session_terminal_oracles_tests.rs|child|fence
+";
+/// Each pinned site's arm (`file|fn|callee|its opening tokens`): the poison arm
+/// (adapter/mod.rs:372) and the append-failure arm (coordinator.rs:754).
+const DOOR_ARMS: [&str; 2] = [
+    "src/adapter/mod.rs|locked|halt|Err ( poisoned ) = > {",
+    "src/coordinator.rs|write_record|fence|if let Err ( e ) = self . store . append ( & line ) {",
+];
+/// Each pinned site's form (`file|fn|callee|tokens holding it`): `(self.fence)()` (:763),
+/// the closure `fence: Box::new(move || fencer.fence())` (:1119, R231 C1), and (R234 C5)
+/// close_report's four `o.halt.<field>` reads (hands.rs:804).
+const DOOR_FORMS: [&str; 3] = [
+    "src/coordinator.rs|write_record|fence|( self . fence ) (",
+    "src/coordinator.rs|open|fence|fence : Box : : new ( move | | fencer . fence ( ) )",
+    "host/src/hands.rs|close_report|halt|o . halt .",
+];
+/// Each non-test `halt` or `fence` in `t` but its `fn`, as `(enclosing fn, index)`.
+fn door_calls<'a>(t: &[&'a str]) -> Vec<(&'a str, usize)> {
+    let named = |i: usize| ["halt", "fence"].contains(&t[i]) && i > 0 && t[i - 1] != "fn";
+    production_sites(t, named)
+}
+/// Whether `t[i]` lies inside an occurrence of the tokens `form`.
+fn in_form(t: &[&str], i: usize, form: &str) -> bool {
+    let f: Vec<&str> = form.split(' ').collect();
+    (i.saturating_sub(f.len() - 1)..=i).any(|k| t[k..].starts_with(&f))
+}
+/// Whether `t[i]` lies in the block `head` opens, the last such before it.
+fn in_arm(t: &[&str], i: usize, head: &str) -> bool {
+    let head: Vec<&str> = head.split(' ').collect();
+    let at = (0..i).rev().find(|&k| t[k..].starts_with(&head));
+    at.is_some_and(|k| i < close_of(t, k + head.len() - 1))
+}
+/// U20b: (a) another production `halt`, (b) another `fence`, or a pinned one outside its arm
+/// or form, (c) another `halt` in `host/src/`.
+fn door_caller_findings(sources: &[(String, String)]) -> Vec<String> {
+    let lexed: Vec<(&str, Vec<&str>)> = sources
+        .iter()
+        .filter(|(_, s)| tokens(s).is_ok())
+        .map(|(f, s)| (f.as_str(), lex(s)))
+        .collect();
+    let mods = test_mods(&lexed);
+    let clause = |file: &str, callee: &str| match (callee, file.starts_with("host/src/")) {
+        ("halt", true) => "(c)",
+        ("halt", false) => "(a)",
+        _ => "(b)",
+    };
+    let (mut listed, mut found): (Vec<&str>, _) = (DOOR_CALLERS.lines().collect(), Vec::new());
+    for (file, t) in lexed.iter().filter(|(f, _)| !caller_excluded(f, &mods)) {
+        for (within, i) in door_calls(t) {
+            let (row, which) = (format!("{file}|{within}|{}", t[i]), clause(file, t[i]));
+            match listed.iter().position(|l| *l == row) {
+                Some(at) => drop(listed.remove(at)),
+                None => found.push(format!("door callers {which}: unlisted {row}")),
+            }
+            let pinned = |a: &&str| a.strip_prefix(&format!("{row}|")).map(str::to_owned);
+            if DOOR_ARMS
+                .iter()
+                .find_map(pinned)
+                .is_some_and(|h| !in_arm(t, i, &h))
+            {
+                found.push(format!("door callers {which}: {row} outside its arm"));
+            }
+            if DOOR_FORMS
+                .iter()
+                .find_map(pinned)
+                .is_some_and(|f| !in_form(t, i, &f))
+            {
+                found.push(format!("door callers {which}: {row} outside its form"));
+            }
+        }
+    }
+    let callee = |l: &str| l.rsplit('|').next().unwrap_or("").to_string();
+    for l in listed {
+        let which = clause(l, &callee(l));
+        found.push(format!("door callers {which}: missing {l}"));
     }
     found
 }
@@ -2816,6 +3175,11 @@ s|fn registered
 s|fn read_registered
 h|fn pressed_registered
 s|fn collect_report
+s|fn called
+s|fn read_called
+s|fn identified
+s|fn read_identified
+s|fn d_cancel
 ";
 /// The one export that hands out a composed type (`T7_TYPES`): by value.
 const S5_BY_VALUE: &str = "Mother.m";
@@ -3427,7 +3791,7 @@ fn sb3e_s5_sections_are_the_closed_list() {
         &expected,
     );
     // P-W1, P-W2: an arm and a control bound to a section that does not own them.
-    let head = "macro_rules! cells {\n    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_close_obligations, close_obligations lifecycle, s5_close::ctl_close_obligations); ctl!(ctl_delivery, delivery lifecycle, s5_close::ctl_delivery); ctl!(ctl_mother_end, mother_end lifecycle, s5_close::ctl_mother_end); ctl!(ctl_primary_end, primary_end lifecycle, s5_close::ctl_primary_end); ctl!(ctl_producer_join, producer_join lifecycle, s5_close::ctl_producer_join); ctl!(ctl_seal, seal lifecycle, s5_close::ctl_seal); ctl!(ctl_registration_record, registration_record ingress, s5_reg::ctl_registration_record); ctl!(ctl_close_restrict, close_restrict lifecycle, s5_r6::ctl_close_restrict); ctl!(ctl_emergency_restrict, emergency_restrict lifecycle, s5_r6::ctl_emergency_restrict); ctl!(ctl_registration_reserve, registration_reserve ingress, s5_reg::ctl_registration_reserve); ctl!(ctl_registration_readiness, registration_readiness ingress, s5_reg::ctl_registration_readiness); ctl!(ctl_close_report, close_report lifecycle, s5_report::ctl_close_report); };\n";
+    let head = "macro_rules! cells {\n    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_close_obligations, close_obligations lifecycle, s5_close::ctl_close_obligations); ctl!(ctl_delivery, delivery lifecycle, s5_close::ctl_delivery); ctl!(ctl_mother_end, mother_end lifecycle, s5_close::ctl_mother_end); ctl!(ctl_primary_end, primary_end lifecycle, s5_close::ctl_primary_end); ctl!(ctl_producer_join, producer_join lifecycle, s5_close::ctl_producer_join); ctl!(ctl_seal, seal lifecycle, s5_close::ctl_seal); ctl!(ctl_registration_record, registration_record ingress, s5_reg::ctl_registration_record); ctl!(ctl_close_restrict, close_restrict lifecycle, s5_r6::ctl_close_restrict); ctl!(ctl_emergency_restrict, emergency_restrict lifecycle, s5_r6::ctl_emergency_restrict); ctl!(ctl_registration_reserve, registration_reserve ingress, s5_reg::ctl_registration_reserve); ctl!(ctl_registration_readiness, registration_readiness ingress, s5_reg::ctl_registration_readiness); ctl!(ctl_close_report, close_report lifecycle, s5_report::ctl_close_report); ctl!(ctl_registration_install, registration_install ingress, s5_reg::ctl_registration_install); ctl!(ctl_registration_version, registration_version ingress, s5_reg::ctl_registration_version); ctl!(ctl_registration_status, registration_status ingress, s5_reg::ctl_registration_status); ctl!(ctl_registration_tags, registration_tags ingress, s5_reg::ctl_registration_tags); ctl!(ctl_registration_show, registration_show ingress, s5_reg::ctl_registration_show); ctl!(ctl_call_version, call_version ingress, s5_call_b::ctl_call_version); ctl!(ctl_call_status, call_status ingress, s5_call_b::ctl_call_status); ctl!(ctl_call_tags, call_tags ingress, s5_call_b::ctl_call_tags); ctl!(ctl_cancel_run, cancel_run ingress, s5_door::ctl_cancel_run); ctl!(ctl_identity_view, identity_view ingress, s5_ident::ctl_identity_view); ctl!(ctl_inference_binding, inference_binding ingress, s5_ident::ctl_inference_binding); };\n";
     let (cell, control) = (
         "    (r9 seal lifecycle closingnormal; $($rest:tt)*) => { cell!(rc_r9_seal_lifecycle_closingnormal, r9 seal lifecycle closingnormal, s5_r34::closingnormal); cells! { $($rest)* } };\n",
         "macro_rules! cells {\n    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_seal, seal lifecycle, s5_reg::ctl_seal); };\n",
@@ -3992,7 +4356,7 @@ fn sb3e_w0b_compact_arms() {
             &format!("    (r5 call_chat ingress quit; $($rest:tt)*) => {{ {body} }};\n"),
         )
     };
-    let terminal = "    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_close_obligations, close_obligations lifecycle, s5_close::ctl_close_obligations); ctl!(ctl_delivery, delivery lifecycle, s5_close::ctl_delivery); ctl!(ctl_mother_end, mother_end lifecycle, s5_close::ctl_mother_end); ctl!(ctl_primary_end, primary_end lifecycle, s5_close::ctl_primary_end); ctl!(ctl_producer_join, producer_join lifecycle, s5_close::ctl_producer_join); ctl!(ctl_seal, seal lifecycle, s5_close::ctl_seal); ctl!(ctl_registration_record, registration_record ingress, s5_reg::ctl_registration_record); ctl!(ctl_close_restrict, close_restrict lifecycle, s5_r6::ctl_close_restrict); ctl!(ctl_emergency_restrict, emergency_restrict lifecycle, s5_r6::ctl_emergency_restrict); ctl!(ctl_registration_reserve, registration_reserve ingress, s5_reg::ctl_registration_reserve); ctl!(ctl_registration_readiness, registration_readiness ingress, s5_reg::ctl_registration_readiness); ctl!(ctl_close_report, close_report lifecycle, s5_report::ctl_close_report); };\n";
+    let terminal = "    () => { ctl!(ctl_call_chat, call_chat ingress, s5::ctl_call_chat); ctl!(ctl_close_obligations, close_obligations lifecycle, s5_close::ctl_close_obligations); ctl!(ctl_delivery, delivery lifecycle, s5_close::ctl_delivery); ctl!(ctl_mother_end, mother_end lifecycle, s5_close::ctl_mother_end); ctl!(ctl_primary_end, primary_end lifecycle, s5_close::ctl_primary_end); ctl!(ctl_producer_join, producer_join lifecycle, s5_close::ctl_producer_join); ctl!(ctl_seal, seal lifecycle, s5_close::ctl_seal); ctl!(ctl_registration_record, registration_record ingress, s5_reg::ctl_registration_record); ctl!(ctl_close_restrict, close_restrict lifecycle, s5_r6::ctl_close_restrict); ctl!(ctl_emergency_restrict, emergency_restrict lifecycle, s5_r6::ctl_emergency_restrict); ctl!(ctl_registration_reserve, registration_reserve ingress, s5_reg::ctl_registration_reserve); ctl!(ctl_registration_readiness, registration_readiness ingress, s5_reg::ctl_registration_readiness); ctl!(ctl_close_report, close_report lifecycle, s5_report::ctl_close_report); ctl!(ctl_registration_install, registration_install ingress, s5_reg::ctl_registration_install); ctl!(ctl_registration_version, registration_version ingress, s5_reg::ctl_registration_version); ctl!(ctl_registration_status, registration_status ingress, s5_reg::ctl_registration_status); ctl!(ctl_registration_tags, registration_tags ingress, s5_reg::ctl_registration_tags); ctl!(ctl_registration_show, registration_show ingress, s5_reg::ctl_registration_show); ctl!(ctl_call_version, call_version ingress, s5_call_b::ctl_call_version); ctl!(ctl_call_status, call_status ingress, s5_call_b::ctl_call_status); ctl!(ctl_call_tags, call_tags ingress, s5_call_b::ctl_call_tags); ctl!(ctl_cancel_run, cancel_run ingress, s5_door::ctl_cancel_run); ctl!(ctl_identity_view, identity_view ingress, s5_ident::ctl_identity_view); ctl!(ctl_inference_binding, inference_binding ingress, s5_ident::ctl_inference_binding); };\n";
     let again = "cells! { $($rest)* }";
     let slug = "U5 macro: the arm rc_r5_call_chat_ingress_quit";
     let other = "    (r5 call_chat ingress read_failure; $($rest:tt)*) => { cell!(rc_r5_call_chat_ingress_read_failure, r5 call_chat ingress read_failure, s5::read_failure); cells! { $($rest)* } };\n";
@@ -4056,6 +4420,261 @@ fn sb3e_w0b_compact_arms() {
     ] {
         let planted = planted(&sources, &mains, main, &text);
         shown(&mut misses, plant, &inventory_findings(&planted), &[expected]);
+    }
+    fail_on(misses);
+}
+
+/// U20a (SB3E-R214, R214.2): each clause of `close_caller_findings` refuses
+/// its own planted text, and the real tree passes. A commented-out call, a
+/// string, a `#[cfg(test)]` item or module and an excluded path are no
+/// production callers.
+#[test]
+fn sb3e_u20a_close_callers() {
+    let sources = walked().0;
+    let real = close_caller_findings(&sources);
+    let mut misses = match real.is_empty() {
+        true => Vec::new(),
+        false => vec![format!("the real tree: {real:?}")],
+    };
+    let h = "host/src/hands.rs";
+    let run = "    let request = screen.input().quit.take();\n";
+    let uses = "use crate::session_home::SessionServices;\n";
+    let call = "fn f(i: &I) {\n    i.emergency();\n}\n";
+    let edit = |f: &str, old: &str, new: &str| planted(&sources, f, old, new);
+    let at = |old: &str, line: &str| edit(h, old, &format!("{line}\n{old}"));
+    let with = |mut s: Vec<(String, String)>, f: &str, text: &str| {
+        s.push((f.to_string(), text.to_string()));
+        s
+    };
+    let add = |f: &str, text: &str| with(sources.clone(), f, text);
+    // A line put in the run loop: its clause and callee (R214.2 S1 and S2 among them).
+    for (line, clause, callee) in [
+        (
+            "let _ = session.close_obligations();",
+            "(a)",
+            "close_obligations",
+        ),
+        (
+            "let _ = runtime.close_report(\"x\");",
+            "(a)",
+            "close_report",
+        ),
+        ("let _ = ingress.emergency();", "(b)", "emergency"),
+        (
+            "let _ = SessionIngress::emergency(&ingress);",
+            "(b)",
+            "emergency",
+        ),
+        ("screen.stop.press();", "(c)", "press"),
+        ("screen.receive(Line::Stop, false);", "(c)", "receive"),
+        ("let f = SessionIngress::emergency;", "(b)", "emergency"),
+    ] {
+        let expected = format!("close callers {clause}: unlisted {h}|run|{callee}");
+        let found = close_caller_findings(&at(run, line));
+        shown(&mut misses, line, &found, &[&expected]);
+    }
+    let report = "        let model = self.home.session.close_obligations();\n";
+    let reader = "    let reader_done = terminal.stop_reader(producers_until);\n";
+    let (bin, exit) = (
+        "host/src/bin/mother-hands.rs",
+        concat!("use std::", "process::ExitCode;\n"),
+    );
+    let (term, input) = (
+        "host/src/terminal.rs",
+        "\nfn read_input(shared: Arc<Shared>) {\n",
+    );
+    let widened = input.replace("\nfn", "\npub(crate) fn");
+    let join = "fn join<T>(handle: &mut Option<JoinHandle<T>>, deadline: Instant, screen: &Shared)";
+    let hooked = join.replace("(handle", "(#[cfg(test)] _h: u8, handle");
+    let hooked = format!("{hooked} -> Option<T> {{\n    screen.stop.press();\n");
+    let accepts = "fn q(i: &I) { i.accept(k, 9); }";
+    let press = "fn f(s: &S) {\n    s.stop.press();\n}\n";
+    let (lib, stop) = ("host/src/lib.rs", "mod stop;\n");
+    let receive = at(run, "screen.receive(Line::Stop, false);");
+    let again = format!("{stop}#[cfg(test)]\n#[path = \"hands.rs\"]\nmod again;\n");
+    let alias = "use crate::terminal::{route_read as feed};";
+    for (planted, expected) in [
+        (
+            edit(h, report, ""),
+            "(a): missing host/src/hands.rs|close_report|close_obligations",
+        ),
+        (
+            add("host/src/x.rs", accepts),
+            "(b): unlisted host/src/x.rs|q|accept",
+        ),
+        (
+            edit(h, reader, "let reader_done = true;\n"),
+            "(d): order: the reader is not joined",
+        ),
+        (
+            at(uses, "use crate::legacy_terminal;"),
+            "(e): host/src/hands.rs uses legacy_terminal",
+        ),
+        (
+            edit(bin, exit, "use x::legacy_stop;\n"),
+            "(e): host/src/bin/mother-hands.rs uses legacy_stop",
+        ),
+        // R214.2 S1: a scoped callee is not widened; S3: exact exclusions; S4: a parameter's cfg(test).
+        (
+            edit(term, input, &widened),
+            "(c): host/src/terminal.rs widens fn read_input",
+        ),
+        (
+            add("host/src/legacy_x.rs", press),
+            "(c): unlisted host/src/legacy_x.rs|f|press",
+        ),
+        (
+            at(uses, "use crate::legacy_x;"),
+            "(e): host/src/hands.rs uses legacy_x",
+        ),
+        (
+            add("host/src/x_tests.rs", call),
+            "(b): unlisted host/src/x_tests.rs|f|emergency",
+        ),
+        (
+            edit(h, &format!("{join} -> Option<T> {{\n"), &hooked),
+            "(c): unlisted host/src/hands.rs|join|press",
+        ),
+        // R214.3 D1: a `use` alias; D2: a `#[path]` test module hides no production file.
+        (
+            at(uses, alias),
+            "(c): unlisted host/src/hands.rs|-|route_read",
+        ),
+        (
+            planted(&receive, lib, stop, &again),
+            "(c): unlisted host/src/hands.rs|run|receive",
+        ),
+    ] {
+        let expected = format!("close callers {expected}");
+        let found = close_caller_findings(&planted);
+        shown(&mut misses, &expected, &found, &[&expected]);
+    }
+    let lib = edit(lib, stop, &format!("{stop}#[cfg(test)]\nmod u20a_t;\n"));
+    for (plant, planted) in [
+        (
+            "a comment",
+            at(run, "// let _ = session.close_obligations();"),
+        ),
+        (
+            "a string",
+            at(run, "let _ = \"session.close_obligations()\";"),
+        ),
+        (
+            "a cfg(test) module",
+            at(uses, &format!("#[cfg(test)]\nmod u {{\n{call}}}")),
+        ),
+        ("a cfg(test) fn", at(uses, &format!("#[cfg(test)]\n{call}"))),
+        ("an integration test", add("host/tests/u20a.rs", call)),
+        ("an example", add("host/examples/u20a.rs", call)),
+        (
+            "a cfg(test)-declared module",
+            with(lib, "host/src/u20a_t.rs", call),
+        ),
+    ] {
+        let found = close_caller_findings(&planted);
+        if found != real {
+            misses.push(format!("{plant} counted as a production caller: {found:?}"));
+        }
+    }
+    fail_on(misses);
+}
+
+/// U20b (SB3E-R226 F-B): each clause of `door_caller_findings` refuses its own planted
+/// text, and the real tree passes; a comment, a string, a `#[cfg(test)]` item or module and
+/// a test file are no production callers.
+#[test]
+fn sb3e_u20b_door_callers() {
+    let sources = walked().0;
+    let real = door_caller_findings(&sources);
+    let mut misses = match real.is_empty() {
+        true => Vec::new(),
+        false => vec![format!("the real tree: {real:?}")],
+    };
+    let (h, am) = ("host/src/hands.rs", "src/adapter/mod.rs");
+    let run = "    let request = screen.input().quit.take();\n";
+    let call = "fn f(d: &D) {\n    d.halt(r);\n}\n";
+    let at = |f: &str, old: &str, line: &str| planted(&sources, f, old, &format!("{line}\n{old}"));
+    let mut test_file = sources.clone();
+    test_file.push(("host/tests/u20b.rs".to_string(), call.to_string()));
+    let halt = "self.door.halt(HaltReason::JournalFailed)";
+    let ok = "(runs, Owed::default()),";
+    let poisoned = planted(&sources, am, ok, &format!("{{ let _ = {halt}; {ok} }}"));
+    let arm = format!("                    {halt}\n                }})) {{");
+    let gone = planted(&sources, am, &arm, "                })) {");
+    let withdraw = "            return self.withdraw_lite(mission);\n";
+    let append = "        if let Err(e) = self.store.append(&line) {\n";
+    let hands = at(h, run, "door.halt(r);");
+    let path = at(h, run, "Door::halt(&d, r);");
+    let fenced = at(h, run, "port.fence();");
+    let adapter = at(am, withdraw, &format!("{halt};"));
+    let co = "src/coordinator.rs";
+    let outside = at(co, append, "(self.fence)();");
+    // R231 S1: a path call, a method value, a destructured field and a raw identifier.
+    let ufcs = at(h, run, "GovernedPort::fence(&port);");
+    let value = at(h, run, "let _ = ports.map(GovernedPort::fence);");
+    let bound = at(
+        co,
+        append,
+        "let Inner { fence, .. } = &mut *inner;\n        fence();",
+    );
+    let raw = at(h, run, "door.r#halt(r);");
+    // R234 C5: one `o.halt.<field>` read dropped and a `door.halt` call added in close_report.
+    let read = ", o.halt.lost)),";
+    let head = "    fn close_report(&self, stage: &str) -> String {\n";
+    let swapped = planted(&sources, h, read, ", 0)),");
+    let swapped = planted(&swapped, h, head, &format!("{head}        door.halt(r);\n"));
+    // R231 C1: an eager `fence` in `open` beside its closure.
+    let fencer = "        let fencer = port.clone();\n";
+    let eager = planted(
+        &sources,
+        co,
+        fencer,
+        &format!("{fencer}        let _ = fencer.fence();\n"),
+    );
+    for (planted, expected) in [
+        (ufcs, "(b): unlisted host/src/hands.rs|run|fence"),
+        (value, "(b): unlisted host/src/hands.rs|run|fence"),
+        (bound, "(b): unlisted src/coordinator.rs|write_record|fence"),
+        (raw, "(c): unlisted host/src/hands.rs|run|halt"),
+        (eager, "(b): src/coordinator.rs|open|fence outside its form"),
+        (
+            swapped,
+            "(c): host/src/hands.rs|close_report|halt outside its form",
+        ),
+        (hands, "(c): unlisted host/src/hands.rs|run|halt"),
+        (path, "(c): unlisted host/src/hands.rs|run|halt"),
+        (fenced, "(b): unlisted host/src/hands.rs|run|fence"),
+        (adapter, "(a): unlisted src/adapter/mod.rs|withdraw|halt"),
+        (
+            poisoned,
+            "(a): src/adapter/mod.rs|locked|halt outside its arm",
+        ),
+        (gone, "(a): missing src/adapter/mod.rs|locked|halt"),
+        (
+            outside,
+            "(b): src/coordinator.rs|write_record|fence outside its arm",
+        ),
+    ] {
+        let e = format!("door callers {expected}");
+        shown(&mut misses, &e, &door_caller_findings(&planted), &[&e]);
+    }
+    for (plant, planted) in [
+        ("a comment", at(h, run, "// door.halt(r);")),
+        ("a string", at(h, run, "let _ = \"door.halt(r)\";")),
+        (
+            "a cfg(test) module",
+            at(h, run, &format!("#[cfg(test)]\nmod u {{\n{call}}}")),
+        ),
+        (
+            "a cfg(test) fn",
+            at(h, run, &format!("#[cfg(test)]\n{call}")),
+        ),
+        ("an integration test", test_file),
+    ] {
+        let found = door_caller_findings(&planted);
+        if found != real {
+            misses.push(format!("{plant} counted as a production caller: {found:?}"));
+        }
     }
     fail_on(misses);
 }

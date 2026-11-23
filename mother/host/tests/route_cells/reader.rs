@@ -342,6 +342,26 @@ pub(super) fn read_ack(
     }
 }
 
+/// U19b-1 (SB3E-R214 F-S0-B, R216 F7; closes U19a's R202 C1 and C3): a byte
+/// row's value admits exactly one reader value, the typed `stop` line for
+/// CR, LF and CRLF (R196.2); a bare terminator or any other value is refused.
+pub(super) fn tied(row: &str, reader: &str) -> Result<(), String> {
+    let want = match row {
+        "CR" => "stop0d",
+        "LF" => "stop0a",
+        "CRLF" => "stop0d0a",
+        "EOF" => "04",
+        "partial_Ctrl_D" => "partial+04",
+        "master_close" => "master_close",
+        "read_failure" => "read_failure",
+        _ => return Err(format!("read: {row} is not a byte value")),
+    };
+    match reader == want {
+        true => Ok(()),
+        false => Err(format!("read: reader value {reader}, not {want}")),
+    }
+}
+
 /// What one applied value left: the acknowledgements received, the drained
 /// traces, the echo after the mark and the session state.
 struct Applied {

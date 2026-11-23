@@ -1403,6 +1403,11 @@ fn verdict(id: &str, returned: &Facts, render: fn(&Facts) -> String) -> Vec<Stri
             "collect: {sink} collected by collect_report {report}"
         ));
     }
+    // U20b: `collect_door` exactly for the `d_cancel` rows (cancel_run).
+    let door = *collector == "collect_door";
+    if door != (sink == DOOR.0) {
+        found.push(format!("collect: {sink} collected by collect_door {door}"));
+    }
     found
 }
 
@@ -1680,6 +1685,7 @@ pub(super) fn driven<R>(
         *APPLIED.lock().unwrap() = Some(Instant::now());
         apply(o, m, held, chat)
     });
+    *STEPS.lock().unwrap() = steps.clone();
     println!("WITNESS {value}: the advance {steps:?}");
     let facts = collect((chain.anchor_point(), acks), (chain.row, value), row);
     (facts, steps, applied)
@@ -1834,7 +1840,16 @@ pub(super) fn chat_closingrestricted(f: &Fixture) -> Facts {
 /// U19a: rows 86-91, the value typed into `Reading` (opened while ord 4's
 /// chat is held at `model.call.observed`), then the chat released.
 fn typed_chat(f: &Fixture, value: &'static str, typed: &'static str) -> Facts {
-    let (mut facts, _, found) = driven(f, value, &U5, &REFUSED, |o, _, held, _| {
+    typed_at(f, (value, typed), &U5, &REFUSED)
+}
+/// U19b-2: `typed_chat` at `chain`'s last point, under `row`.
+fn typed_at(
+    f: &Fixture,
+    (value, typed): (&'static str, &'static str),
+    chain: &Chain,
+    row: &Expect,
+) -> Facts {
+    let (mut facts, _, found) = driven(f, value, chain, row, |o, _, held, _| {
         let reading = Reading::open(o);
         let barriers = reading.typed(typed);
         drop(held);
@@ -2071,7 +2086,7 @@ pub(super) fn collect(
         cfg!(mother_route_seams),
         d.session,
         &d,
-        claim,
+        (claim, row.profile.call_gate),
         &broker,
         &trace,
     );
@@ -2221,7 +2236,7 @@ fn t6(
     cfg: bool,
     session: SessionIdentity,
     d: &Driver,
-    claim: Option<(RunId, u32)>,
+    (claim, n): (Option<(RunId, u32)>, usize),
     broker: &[s1::Entry],
     trace: &[s5::Entry],
 ) -> Result<(), &'static str> {
@@ -2239,15 +2254,22 @@ fn t6(
     }
     let builder = d.recorded.iter().find(|r| r.0 == LaneRole::Builder);
     let builder = builder.map(|r| r.1);
+    // U19b-2 (SB3E-R216 F6): a call refused at ord n < 4 (its profile's
+    // gates) makes no chat and no charge: its ord-n metadata gate, and the
+    // Builder's `mother.recheck` (model_calls.rs:491).
+    let (kind, point) = match n {
+        4 => ("chat", "mother.charge.entry"),
+        _ => ("metadata", "mother.recheck"),
+    };
     let chat = |e: &s1::Entry| {
         e.session == Some(session)
             && e.request == Some(d.request)
             && e.run.zip(e.attempt) == claim
-            && e.kind == Some("chat")
-            && e.request_ordinal == Some(4)
+            && e.kind == Some(kind)
+            && e.request_ordinal == Some(n as u64)
     };
     let charged = |e: &s5::Entry| {
-        e.point == "mother.charge.entry"
+        e.point == point
             && e.session == Some(session)
             && e.request == Some(d.request)
             && e.invocation == builder
@@ -2712,11 +2734,63 @@ fn route_s5_close_window_opens_at_the_hold() {
 /// R1 (R100.2, R101.3: points are compared only with `REG_POINTS` and the
 /// literal lists): each d_register sink's held point (model.rs:301, 122) and
 /// the d_bootstrap sink's (host_session.rs:858; SEAM-1).
-const REG_POINTS: [(&str, &str); 3] = [
+const REG_POINTS: [(&str, &str); 4] = [
     ("registration_record", "model.record.before"),
     ("registration_reserve", "reg.reserve"),
     ("registration_readiness", "reg.ready"),
+    // U19b-1: the install (model.rs:319), after the record.
+    ("registration_install", "model.install.before"),
 ];
+/// U19b-1 (SB3E-R216 F4): the metadata gates (model.rs:243), each held at
+/// its own arrival: the gate ordinal (ollama.rs:103-104, ords 1-4).
+const REG_GATES: [(&str, usize); 4] = [
+    ("registration_version", 1),
+    ("registration_status", 2),
+    ("registration_tags", 3),
+    ("registration_show", 4),
+];
+const GATE: &str = "model.gate.checked";
+/// U19b-1: a registration row's held point and arrival.
+fn reg_point(sink: &str) -> Option<(&'static str, usize)> {
+    let point = REG_POINTS.iter().find(|p| p.0 == sink).map(|p| (p.1, 1));
+    point.or_else(|| REG_GATES.iter().find(|g| g.0 == sink).map(|g| (GATE, g.1)))
+}
+/// U19b-1 (F4): the `n`-th arrival at `point`, re-armed between arrivals
+/// (as `chained`'s `Arrival`); `None` if one is not acknowledged.
+fn reg_drive_nth(
+    f: &Fixture,
+    held: &mut s1::Held,
+    point: &'static str,
+    n: usize,
+) -> Option<s1::Entry> {
+    for _ in 1..n {
+        held.acknowledged.recv_timeout(PATIENCE).ok()?;
+        drop(std::mem::replace(held, f.pause(point)));
+    }
+    held.acknowledged.recv_timeout(PATIENCE).ok()
+}
+/// U19b-1 (F4): a gate is acknowledged on the kernel's per-request
+/// `nexus-model-exchange` thread (exchange.rs:187-189), at the row's ord, of
+/// S and request 0; never the worker's own install-time entry (model.rs:321
+/// calls `admission`, model.rs:243, on the worker).
+fn gate_ack(
+    ack: Option<&s1::Entry>,
+    (s, n): (SessionIdentity, usize),
+    worker: ThreadId,
+) -> Result<(), String> {
+    let ours = |a: &&s1::Entry| {
+        (a.point, a.note, a.session, a.request, a.request_ordinal)
+            == (GATE, false, Some(s), Some(0), Some(n as u64))
+            && a.thread != worker
+    };
+    match ack.filter(ours) {
+        Some(_) => Ok(()),
+        None => Err(format!(
+            "registered: gate acknowledgement {:?}, ord {n}, the worker {worker:?}",
+            ack.map(|a| (a.point, a.request_ordinal, a.thread))
+        )),
+    }
+}
 /// R2: the registration-time reductions, lock-free (design 4.4 `free`), each
 /// with its effect checked while the hold stands; the findings. U19a: the
 /// lifecycle values reached while held (set B, SB3E-R196.1).
@@ -2792,7 +2866,7 @@ fn sink_result<T, E: std::fmt::Debug>(
 }
 /// U19a (U18 B4-B6, SB3E-R106.3): production's reader composed here, over the
 /// cell's ingress, as hands.rs composes it: the pty, `Terminal::open`, then
-/// the Stop route bound to the session (hands.rs:1092, 1130; S6).
+/// the Stop route bound to the session (hands.rs:1119, 1157; S6).
 struct Reading {
     terminal: Terminal,
     tty: reader::Tty,
@@ -2901,7 +2975,7 @@ fn reg_drive(
     want: &[Result<(), &str>],
 ) -> Facts {
     let mut b = open_broker(f);
-    let Some(point) = REG_POINTS.iter().find(|p| p.0 == row.0).map(|p| p.1) else {
+    let Some((point, n)) = reg_point(row.0) else {
         let missing = vec![format!("registered: {} has no d_register point", row.0)];
         let held = (Vec::new(), Vec::new());
         return collect_reg(&b, held, (row, value), (None, missing), "collect_reg");
@@ -2926,17 +3000,26 @@ fn reg_drive(
             ));
         }
     }
-    let held = f.pause(point);
+    let mut held = f.pause(point);
     let (ack, since, result, typed) = std::thread::scope(|scope| {
         let worker = scope.spawn(move || match ready {
             true => session.finish_bootstrap(),
             false => session.register_local_model(endpoint, spec()).map(|_| ()),
         });
         let thread = worker.thread().id();
-        let ack = held.acknowledged.recv_timeout(PATIENCE).ok();
-        let since = (b.native.records().len(), b.peer.lock().unwrap().len());
+        let ack = reg_drive_nth(f, &mut held, point, n);
+        // U19b-1 (F8): a gate row's peer window opens at `open_broker`.
+        let peer = match point == GATE {
+            true => b.since.1,
+            false => b.peer.lock().unwrap().len(),
+        };
+        let since = (b.native.records().len(), peer);
         let mut typed = None;
-        match reg_ack(ack.as_ref(), point, session.identity(), thread) {
+        let acked = match point == GATE {
+            true => gate_ack(ack.as_ref(), (session.identity(), n), thread),
+            false => reg_ack(ack.as_ref(), point, session.identity(), thread),
+        };
+        match acked {
             Ok(()) => {
                 let at = Instant::now();
                 match (how, &reading) {
@@ -2972,6 +3055,15 @@ fn reg_drive(
     let phases: Vec<&str> = facts.native.iter().map(|r| r.phase.as_str()).collect();
     println!("WITNESS registered {value}: native {phases:?}");
     let s = facts.session;
+    // U19b-1 (SB3E-R216.1 F-B2 inverse control): the admitted path writes no
+    // refusal record, neither the install's S1 entry nor the gate's note.
+    let refusal = |e: &&s1::Entry| ["reg.admission", "reg:cas"].contains(&e.point);
+    if value == "none" && facts.broker.iter().any(|e| refusal(&e)) {
+        later(
+            &mut facts,
+            "registered: a refusal record on the admitted path".into(),
+        );
+    }
     let mine = |e: &&s1::Entry| e.point == "ingress.emergency" && e.session == Some(s);
     let applications = facts.broker.iter().filter(mine).count();
     if value == "repeated" && applications != 2 {
@@ -3090,6 +3182,37 @@ fn route_s5_registered_notes_the_refused_reserve() {
     });
 }
 
+/// U19b-1 (SB3E-R216 F4): a real `registered` run held at `show`'s ord 4;
+/// the gate ack rule admits that run's exchange-thread acknowledgement and
+/// refuses it as the worker's own entry, at another ord, or of another
+/// session (rule level, as `route_s5_registered_applies_and_collects`).
+#[test]
+fn route_s5_gate_ack_binds_the_exchange_thread() {
+    child("s5::route_s5_gate_ack_binds_the_exchange_thread", |f| {
+        let facts = registered(f, ("registration_show", "ingress"), "none", &[Ok(())]);
+        assert!(facts.findings.is_empty(), "{:?}", facts.findings);
+        let Some(Ack::S1(ack)) = facts.acks.first() else {
+            panic!("no acknowledgement")
+        };
+        let (s, harness) = (facts.session, std::thread::current().id());
+        assert_eq!(gate_ack(Some(ack), (s, 4), harness), Ok(()));
+        assert!(
+            gate_ack(Some(ack), (s, 4), ack.thread).is_err(),
+            "the worker's"
+        );
+        assert!(gate_ack(Some(ack), (s, 3), harness).is_err(), "another ord");
+        let other = SessionSeed::new().unwrap().identity();
+        assert!(
+            gate_ack(Some(ack), (other, 4), harness).is_err(),
+            "another session"
+        );
+        assert!(
+            gate_ack(None, (s, 4), harness).is_err(),
+            "no acknowledgement"
+        );
+    });
+}
+
 /// U21a (SB3E-R197, R199): the passive `close_report` collection, once the
 /// `hands::run` thread is joined: both traces drained; S and Q are the
 /// close worker's own `close.seal` (S1, before the acknowledgement on its
@@ -3204,4 +3327,552 @@ pub(super) fn collect_report(
     };
     KEPT.lock().unwrap().push(("collect_report", facts.clone()));
     facts
+}
+
+// U19b-2 (SB3E-R216 F1, F6; R217): the R5 call rows refused at ords 1-3,
+// harness composition until M-5b (F1: production makes no model call,
+// hands.rs:1339-1350). A call's ords 1-3 are `check_runtime`'s metadata
+// requests (ollama.rs:137, 249, 265, 285), before its charge (:138).
+const CALL_ORDS: [(&str, usize); 3] = [("call_version", 1), ("call_status", 2), ("call_tags", 3)];
+/// F6: a call refused at ord `n` < 4: `REFUSED`'s path with `n` gates and no
+/// charge or settle (model_calls.rs:216, 307), so no charge position.
+const fn refused_at(n: usize) -> Expect {
+    let profile = Profile {
+        call_gate: n,
+        ..REFUSED.profile
+    };
+    let multiplicity = [
+        ("mother.charge.entry", 0),
+        ("mother.charge", 0),
+        ("mother.charge.ok", 0),
+        ("mother.settle", 0),
+    ];
+    Expect {
+        profile,
+        multiplicity,
+        position: None,
+        ..REFUSED
+    }
+}
+/// C1 (SB3E-R194, R217): the steps of the advance `driven` ran last.
+static STEPS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+/// U19b-2: a call row's value applied while its ord is held from the call's
+/// first arrival (as `ord3_quit`): an ingress row at `model.call.observed`, a
+/// lifecycle row at `call.gate`, under the ord-n profile; the control `none`
+/// under `HELD`. C1: the advance's last step is one of `want`.
+pub(super) fn called(
+    f: &Fixture,
+    row: (&'static str, &'static str),
+    value: &'static str,
+    want: &[&str],
+) -> Facts {
+    call_drive(f, row, (value, None), want)
+}
+/// U19b-2: `called` with the reader value `typed` typed while held.
+pub(super) fn read_called(
+    f: &Fixture,
+    row: (&'static str, &'static str),
+    (value, typed): (&'static str, &'static str),
+    want: &[&str],
+) -> Facts {
+    call_drive(f, row, (value, Some(typed)), want)
+}
+fn call_drive(
+    f: &Fixture,
+    row: (&'static str, &'static str),
+    (value, typed): (&'static str, Option<&'static str>),
+    want: &[&str],
+) -> Facts {
+    let n = CALL_ORDS.iter().find(|c| c.0 == row.0).map(|c| c.1);
+    let n = n.unwrap_or_else(|| panic!("called: {} has no call ord", row.0));
+    let points: &'static [&'static str] = match row.1 {
+        "lifecycle" => &["call.gate"],
+        _ => &OBSERVED,
+    };
+    let (anchor, expect) = (Anchor::Arrival(n), refused_at(n));
+    let chain = Chain {
+        row,
+        anchor,
+        points,
+    };
+    let mut facts = match (value, typed) {
+        (_, Some(typed)) => typed_at(f, (value, typed), &chain, &expect),
+        ("none", None) => driven(f, value, &chain, &HELD, |_, _, held, _| drop(held)).0,
+        ("repeated", None) => repeat(f, &chain, &expect),
+        ("quit" | "ClosingNormal", None) => shutdown(f, value, &chain, &expect, quit_two),
+        ("Emergency", None) => shutdown(f, value, &chain, &expect, pressed),
+        ("Failed", None) => shutdown(f, value, &chain, &expect, |o| {
+            o.ingress.fail();
+            Ok(())
+        }),
+        ("ClosingRestricted", None) => shutdown(f, value, &chain, &expect, |o| {
+            quit_two(o).and_then(|()| pressed(o))
+        }),
+        _ => panic!("called: no applier for {value}"),
+    };
+    let steps = std::mem::take(&mut *STEPS.lock().unwrap());
+    if !steps.last().is_some_and(|s| want.contains(&s.as_str())) {
+        later(
+            &mut facts,
+            format!("called: the advance {steps:?}, not {want:?}"),
+        );
+    }
+    facts
+}
+
+// U19c (SB3E-R228; Step 0 report §1-§5): identity_view and inference_binding
+// refused while held, harness composition until M-5b (F1: every shipped lane
+// has model cap 0, hands.rs:172-187, lane.rs:146-148). identity_view is held
+// at the advance's first `identity` (coordinator.rs:1866, model.rs:619),
+// inference_binding at its first `model.bind.checked` (coordinator.rs:1915,
+// run.rs:2330); neither refused path reaches the Builder's lane or a call.
+/// Each sink's held point and its entry point (T6).
+const PRE_POINTS: [(&str, &[&str], &str); 2] = [
+    ("identity_view", &["identity"], "identity"),
+    ("inference_binding", &["model.bind.checked"], "bind.entry"),
+];
+/// F2: the two refusal notes (model.rs:623, run.rs:2335).
+const PRE_NOTES: [&str; 2] = ["identity:scope_live", "bind:cas"];
+/// U19c: the row's value applied while its sink is held, collected by
+/// `collect_pre`. C1 (R194): the advance's last step and the mission's end
+/// are `want`'s; the control `none` is released and must write no note.
+pub(super) fn identified(
+    f: &Fixture,
+    row: (&'static str, &'static str),
+    value: &'static str,
+    want: (&str, &str),
+) -> Facts {
+    pre_drive(f, row, (value, None), want)
+}
+/// U19c: `identified` with the reader value `typed` typed while held.
+pub(super) fn read_identified(
+    f: &Fixture,
+    row: (&'static str, &'static str),
+    (value, typed): (&'static str, &'static str),
+    want: (&str, &str),
+) -> Facts {
+    pre_drive(f, row, (value, Some(typed)), want)
+}
+fn pre_drive(
+    f: &Fixture,
+    row: (&'static str, &'static str),
+    (value, typed): (&'static str, Option<&'static str>),
+    want: (&str, &str),
+) -> Facts {
+    let points = PRE_POINTS.iter().find(|p| p.0 == row.0).map(|p| p.1);
+    let points = points.unwrap_or_else(|| panic!("identified: {} has no point", row.0));
+    let chain = Chain {
+        row,
+        anchor: Anchor::Arrival(1),
+        points,
+    };
+    let c = start(f);
+    let (acks, steps, (worker, findings)) = chained(f, &c.mother, &chain, |held, worker| {
+        reopen(); // M6: the window opens at the hold's acknowledgement.
+        let findings = pre_apply(&c.o, held, (value, typed));
+        if value != "none" {
+            *APPLIED.lock().unwrap() = Some(Instant::now());
+        }
+        (worker, findings)
+    });
+    let mut facts = collect_pre(&c.o, (chain.anchor_point(), acks), (row, value), findings);
+    let ack = match facts.acks.first() {
+        Some(Ack::S1(e)) => Some(e.clone()),
+        _ => None,
+    };
+    if let Err(e) = pre_ack(ack.as_ref(), &facts, worker) {
+        later(&mut facts, e);
+    }
+    // C1 (R194): the advance's last step, and the mission's end in the window.
+    let last = steps.last().map_or("none", String::as_str);
+    let end = mission_end(&facts.journal);
+    if (last, end.as_str()) != want {
+        let (a, b) = want;
+        let c1 = format!("identified: the advance ended {last}, the mission {end}, not {a}, {b}");
+        later(&mut facts, c1);
+    }
+    let s = facts.session;
+    let noted = |e: &&s1::Entry| e.note && PRE_NOTES.contains(&e.point);
+    if value == "none" && facts.broker.iter().any(|e| noted(&e)) {
+        later(
+            &mut facts,
+            "identified: a refusal note on the admitted path".into(),
+        );
+    }
+    let pressed = |e: &&s1::Entry| e.point == "ingress.emergency" && e.session == Some(s);
+    let presses = facts.broker.iter().filter(pressed).count();
+    if value == "repeated" && presses != 2 {
+        later(
+            &mut facts,
+            format!("identified: {presses} ingress.emergency entries"),
+        );
+    }
+    facts
+}
+/// U19c: the value while held (typed through production's reader, or
+/// applied with its state read while held, R202 S2), then the release.
+fn pre_apply(
+    o: &Opened,
+    held: Hold,
+    (value, typed): (&'static str, Option<&'static str>),
+) -> Vec<String> {
+    if let Some(typed) = typed {
+        let reading = Reading::open(o);
+        let barriers = reading.typed(typed);
+        drop(held);
+        return reading.close(typed, barriers);
+    }
+    let (want, results) = match value {
+        "repeated" => ("Emergency", vec![pressed(o), pressed(o)]),
+        "quit" | "ClosingNormal" => ("ClosingNormal", vec![quit_two(o)]),
+        "Failed" => {
+            o.ingress.fail();
+            ("Failed", Vec::new())
+        }
+        "none" => return Vec::new(),
+        _ => return vec![format!("identified: no applier for {value}")],
+    };
+    let state = format!("{:?}", o.session.state());
+    drop(held);
+    match results.iter().all(Result::is_ok) && state == want {
+        true => Vec::new(),
+        false => vec![format!(
+            "identified: {value} {results:?}, state {state}, not {want}"
+        )],
+    }
+}
+/// M9: the hold is acknowledged at the row's point on the advancing worker,
+/// never the reader's or the harness's thread: of S and Q at `identity`, of
+/// RUN at `model.bind.checked` (which records no session, run.rs:2330).
+fn pre_ack(ack: Option<&s1::Entry>, f: &Facts, worker: ThreadId) -> Result<(), String> {
+    let run = f.claim.map(|c| c.0);
+    let bound = |a: &s1::Entry| match a.point {
+        "identity" => (a.session, a.request) == (Some(f.session), Some(f.request)),
+        "model.bind.checked" => run.is_some() && a.run == run,
+        _ => false,
+    };
+    let ours = |a: &&s1::Entry| bound(a) && !a.note && a.thread == worker;
+    match ack.filter(ours) {
+        Some(_) => Ok(()),
+        None => Err(format!(
+            "identified: acknowledgement {:?}, the advancing worker {worker:?}",
+            ack.map(|a| (a.point, a.thread))
+        )),
+    }
+}
+/// C1: the mission's end, the window's last Stop, Block or Fail transition.
+fn mission_end(journal: &[Journaled]) -> String {
+    use nexus_mother::journal::Event;
+    use nexus_mother::state::Trigger;
+    let end = journal.iter().rev().find_map(|e| match &e.event {
+        Event::Transition { trigger } => match trigger {
+            Trigger::Stop { .. } | Trigger::Block { .. } | Trigger::Fail { .. } => Some(trigger),
+            _ => None,
+        },
+        _ => None,
+    });
+    end.map_or("none".into(), |t| format!("{t:?}"))
+}
+/// F5: the settle barrier. The advance has returned (`chained` joined it);
+/// a bound Stop route's workers must have finished (no stop event pending or
+/// in flight), bounded by `PATIENCE`.
+fn settled(o: &Opened) -> Result<(), String> {
+    use nexus_governed_control::host_session::stop::StopPhase;
+    let deadline = Instant::now() + PATIENCE;
+    loop {
+        let events = o
+            .session
+            .stop_events()
+            .map_err(|e| format!("settle: {e:?}"))?;
+        let open = [StopPhase::Pending, StopPhase::InFlight];
+        if !events.iter().any(|e| open.contains(&e.phase)) {
+            return Ok(());
+        }
+        if Instant::now() >= deadline {
+            return Err(format!("settle: stop events {events:?}"));
+        }
+        std::thread::sleep(Duration::from_millis(2));
+    }
+}
+/// M4-M6, F5 (SB3E-R228): the passive collection of a held identity or bind
+/// cell, after the settle barrier: both traces; the no-call profile (no
+/// counted call, attempt site, opening or binding entry, `credit_close`'s,
+/// and no Builder lane; the control passes to its one call); T6 at the
+/// row's entry point; RUN from the session's own native `run_opened` (never
+/// the observed entry; ATT is never bound); journal, projection and peer
+/// since the hold's acknowledgement (`reopen`).
+fn collect_pre(
+    o: &Opened,
+    (points, acks): (Vec<&'static str>, Vec<Ack>),
+    (cell, value): ((&'static str, &'static str), &'static str),
+    mut findings: Vec<String>,
+) -> Facts {
+    if READ.lock().unwrap().is_some() {
+        findings.extend(settled(o).err());
+    }
+    let (broker, mother) = (s1::drain_trace(), s5::drain_trace());
+    let s = SOURCES.lock().unwrap().take();
+    let s = s.expect("collect_pre: no observation");
+    let (session, request, calls, recorded) = &s.driver;
+    let made = calls.load(Ordering::SeqCst);
+    let recorded = recorded.lock().unwrap().clone();
+    let builder = recorded.iter().any(|r| r.0 == LaneRole::Builder);
+    let profile = match value {
+        "none" => (made != 1).then_some("driver_calls"),
+        _ => credit_close(made, *session, &broker, &mother)
+            .err()
+            .or(builder.then_some("builder")),
+    };
+    let foreign = mother.iter().any(|m| m.request != Some(*request));
+    if let Some(reason) = profile.or(foreign.then_some("request")) {
+        findings.push(format!("credit: {reason}"));
+    }
+    let entered = PRE_POINTS
+        .iter()
+        .find(|p| p.0 == cell.0)
+        .map_or("", |p| p.2);
+    let seams = t6_close(cfg!(mother_route_seams), *session, entered, &broker);
+    findings.extend(seams.err().map(|r| format!("T6 pre: {r}")));
+    let running = *RUNNING.lock().unwrap();
+    if s.cell != running {
+        findings.push(format!(
+            "collect_pre: observed for {}, not {running}",
+            s.cell
+        ));
+    }
+    let records = s.native.records();
+    let opened: Vec<&str> = records
+        .iter()
+        .filter(|r| r.phase.as_str() == "run_opened")
+        .filter_map(|r| r.run.as_deref())
+        .collect();
+    let run = match opened[..] {
+        [one] => RunId::parse(one),
+        _ => None,
+    };
+    let journal = journal_at(&s.journal).map(|mut j| j.split_off(s.since.0.min(j.len())));
+    let journal = journal.unwrap_or_else(|e| {
+        findings.push(e);
+        Vec::new()
+    });
+    let peer = s.peer.lock().unwrap()[s.since.2..].to_vec();
+    let native = records.get(s.since.1..).unwrap_or_default().to_vec();
+    let events: Vec<String> = journal.iter().map(|e| format!("{:?}", e.event)).collect();
+    let phases: Vec<&str> = native.iter().map(|r| r.phase.as_str()).collect();
+    println!("WITNESS pre window: journal {events:?}, native {phases:?}, run {run:?}");
+    let facts = Facts {
+        session: *session,
+        request: *request,
+        recorded,
+        claim: run.map(|r| (r, u32::MAX)),
+        points,
+        acks,
+        value,
+        row: cell,
+        applied: APPLIED.lock().unwrap().take(),
+        broker,
+        mother,
+        host: Vec::new(),
+        journal,
+        native,
+        peer,
+        findings,
+        read: READ.lock().unwrap().take(),
+    };
+    KEPT.lock().unwrap().push(("collect_pre", facts.clone()));
+    facts
+}
+/// M9 (rule level, over a real typed bind run): the acknowledgement rule
+/// admits the advancing worker's and refuses one on the reader's or the
+/// harness's thread, of another run, or none.
+#[test]
+fn route_s5_pre_ack_binds_the_advancing_worker() {
+    child("s5::route_s5_pre_ack_binds_the_advancing_worker", |f| {
+        let row = ("inference_binding", "ingress");
+        let want = ("Err(Stopped)", "Stop { reason: EmergencyStop }");
+        let facts = read_identified(f, row, ("CR", "stop0d"), want);
+        assert!(facts.findings.is_empty(), "{:?}", facts.findings);
+        let Some(Ack::S1(ack)) = facts.acks.first() else {
+            panic!("no acknowledgement")
+        };
+        let read = facts
+            .read
+            .as_ref()
+            .map(|r| &r.trace[..])
+            .unwrap_or_default();
+        let reader = read
+            .iter()
+            .find(|e| e.point == "host.read")
+            .expect("a read");
+        assert_eq!(pre_ack(Some(ack), &facts, ack.thread), Ok(()));
+        let on = |thread| s1::Entry {
+            thread,
+            ..ack.clone()
+        };
+        let mut other = facts.clone();
+        other.claim = RunId::parse(&format!("run-{}", "0".repeat(32))).map(|r| (r, 0));
+        for (refused, what) in [
+            (
+                pre_ack(Some(&on(reader.thread)), &facts, ack.thread),
+                "the reader's",
+            ),
+            (
+                pre_ack(Some(&on(std::thread::current().id())), &facts, ack.thread),
+                "the harness's",
+            ),
+            (pre_ack(Some(ack), &other, ack.thread), "another run"),
+            (pre_ack(None, &facts, ack.thread), "no acknowledgement"),
+        ] {
+            assert!(refused.is_err(), "{what} not refused");
+        }
+    });
+}
+// ===== U20b (SB3E-R226): the d_cancel driver =====
+/// U20b: the cancel_run rows' sink (`SessionDoor::cancel_run`, h:1400-1419), its point.
+const DOOR: (&str, &str) = ("cancel_run", "door.cancel_run");
+/// U20b (SB3E-R226 F-A, F-E): the d_cancel driver, as `closed`: a harness worker calls
+/// `SessionDoor::cancel_run` on `Opened::door`'s run (for production's `withdraw_lite`,
+/// lite_port.rs:167-170; its order: report.rs `declined`), held at `door.cancel_run`; at
+/// the bounded acknowledgement the window opens and the value is typed into the real
+/// reader (`typed`) or applied (`door_apply`), then released within `SHUTDOWN_PAUSE`.
+/// The acknowledgement is the worker's (`door_ack`); C1 (R194): the sink returns `Ok`.
+pub(super) fn d_cancel(
+    f: &Fixture,
+    row: (&'static str, &'static str),
+    value: &'static str,
+    typed: Option<&'static str>,
+) -> Facts {
+    let c = bootstrap(f); // `opened`, both traces, the sources (Q set below).
+    let (o, (door, run, request)) = (&c.o, c.o.door(&f.0));
+    drop((s1::drain_trace(), s5::drain_trace()));
+    let mut sources = SOURCES.lock().unwrap();
+    sources.as_mut().expect("d_cancel: no sources").driver.1 = request;
+    drop(sources);
+    *CLOSE_Q.lock().unwrap() = None;
+    let reading = typed.map(|_| Reading::open(o));
+    let (mut findings, held) = (Vec::new(), f.pause(DOOR.1));
+    let (ack, result, keys, keyed) = std::thread::scope(|scope| {
+        let worker = scope.spawn(|| door.cancel_run(run));
+        let keys = (o.session.identity(), request, run, worker.thread().id());
+        let ack = held.acknowledged.recv_timeout(PATIENCE).ok();
+        let mut keyed = None;
+        if ack.is_some() {
+            let at = Instant::now();
+            reopen(); // M3: the window opens at the acknowledgement.
+            match (typed, &reading) {
+                (Some(v), Some(r)) => keyed = Some(r.typed(v)),
+                _ => findings.extend(door_apply(o, value)),
+            }
+            if value != "none" {
+                *APPLIED.lock().unwrap() = Some(Instant::now());
+            }
+            let released = at.elapsed();
+            if released >= SHUTDOWN_PAUSE {
+                let late = format!("released after {released:?}, not within {SHUTDOWN_PAUSE:?}");
+                findings.push(format!("d_cancel: {late}"));
+            }
+        }
+        drop(held);
+        (ack, worker.join().unwrap(), keys, keyed)
+    });
+    if let (Some(v), Some(r)) = (typed, reading) {
+        let keyed = keyed.unwrap_or_else(|| (Vec::new(), Instant::now(), 0));
+        findings.extend(r.close(v, keyed));
+    }
+    findings.extend(door_ack(ack.as_ref(), keys).err());
+    let got = result
+        .as_ref()
+        .map_or_else(|e| format!("Err({e:?})"), |_| "Ok".to_string());
+    println!("WITNESS d_cancel {value}: the sink {got}");
+    if got != "Ok" {
+        findings.push(format!("d_cancel: the sink returned {got}, not Ok"));
+    }
+    let mut facts = collect_door(ack, run, (row, value), findings);
+    let s = facts.session;
+    let mine = |e: &&s1::Entry| e.point == "ingress.emergency" && e.session == Some(s);
+    let applications = facts.broker.iter().filter(mine).count();
+    if value == "repeated" && applications != 2 {
+        let counted = format!("d_cancel: {applications} ingress.emergency entries");
+        later(&mut facts, counted);
+    }
+    drop(result);
+    facts
+}
+/// U20b: a B2 row's value applied by the harness while the sink is held
+/// (U19a's `pressed` and `quit_two`; `quit` is Q 2, above the door's Run 1),
+/// its state read while held (as `reg_apply`).
+fn door_apply(o: &Opened, value: &str) -> Vec<String> {
+    let (want, applied) = match value {
+        "none" => return Vec::new(),
+        "repeated" => ("Emergency", pressed(o).and_then(|()| pressed(o))),
+        "Emergency" => ("Emergency", pressed(o)),
+        "Failed" => {
+            o.ingress.fail();
+            ("Failed", Ok(()))
+        }
+        "quit" | "ClosingNormal" => ("ClosingNormal", quit_two(o)),
+        "ClosingRestricted" => ("ClosingRestricted", quit_two(o).and_then(|()| pressed(o))),
+        _ => return vec![format!("d_cancel: no applier for {value}")],
+    };
+    let state = format!("{:?}", o.session.state());
+    match applied {
+        Err(e) => vec![format!("d_cancel: {value} returned {e}")],
+        Ok(()) if state != want => vec![format!("d_cancel: state {state}, not {want}")],
+        Ok(()) => Vec::new(),
+    }
+}
+/// U20b: the acknowledgement is `door.cancel_run`'s, of S, Q and RUN, on the
+/// sink's worker (never the harness's or the reader's thread).
+fn door_ack(
+    ack: Option<&s1::Entry>,
+    (s, q, run, worker): (SessionIdentity, u64, RunId, ThreadId),
+) -> Result<(), String> {
+    let ours = |a: &&s1::Entry| {
+        let keyed = (a.point, a.note, a.session, a.request, a.run)
+            == (DOOR.1, false, Some(s), Some(q), Some(run));
+        keyed && a.thread == worker
+    };
+    match ack.filter(ours) {
+        Some(_) => Ok(()),
+        None => Err(format!(
+            "d_cancel: acknowledgement {:?}, the worker {worker:?}",
+            ack.map(|a| (a.point, a.request, a.run, a.thread))
+        )),
+    }
+}
+/// U20b: `collect_close`'s collection (the window since the acknowledgement), kept as
+/// `collect_door` with the claim's RUN (the door's run) and the reader's facts.
+fn collect_door(
+    ack: Option<s1::Entry>,
+    run: RunId,
+    cell: ((&'static str, &'static str), &'static str),
+    findings: Vec<String>,
+) -> Facts {
+    let mut facts = collect_close(DOOR.1, ack, false, cell, findings);
+    let mut kept = KEPT.lock().unwrap();
+    if kept.pop().is_none_or(|k| k.0 != "collect_close") {
+        facts.findings.push("collect_door: no collection".into());
+    }
+    facts.claim = Some((run, 0));
+    facts.read = READ.lock().unwrap().take();
+    kept.push(("collect_door", facts.clone()));
+    facts
+}
+/// U20b (rule level, over a real d_cancel `quit` run): `door_ack` refuses the
+/// harness's thread and another run.
+#[test]
+fn route_s5_door_ack_binds_the_worker() {
+    child("s5::route_s5_door_ack_binds_the_worker", |f| {
+        let facts = d_cancel(f, (DOOR.0, "ingress"), "quit", None);
+        let (Some(Ack::S1(ack)), Some((run, _))) = (facts.acks.first(), facts.claim) else {
+            panic!("d_cancel: no acknowledgement");
+        };
+        let other = RunId::parse(&format!("run-{}", "0".repeat(32))).unwrap();
+        let (s, q, here) = (facts.session, facts.request, std::thread::current().id());
+        assert_eq!(door_ack(Some(ack), (s, q, run, ack.thread)), Ok(()));
+        let harness = door_ack(Some(ack), (s, q, run, here));
+        assert!(harness.is_err(), "door_ack accepted the harness's thread");
+        let elsewhere = door_ack(Some(ack), (s, q, other, ack.thread));
+        assert!(elsewhere.is_err(), "door_ack accepted another run");
+    });
 }

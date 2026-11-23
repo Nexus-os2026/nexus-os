@@ -1715,3 +1715,278 @@ on the File-mode Normal line (`hands.rs:1294-1295`) and the session's own S1 `re
 with no `reg:word_compare` note (`s5.rs` `collect_report`; R202 C1), never the bare
 ready literal;
 model-mode equivalence for close_report is M-7's ledger item (R199 Q-U21-2).
+
+### 14.19 SB-3E U20a: the five close sinks' set-B rows (SB3E-R214, R214.2)
+
+U20a credits no cell: all 45 set-B rows of the R9 `close_obligations`, `producer_join`,
+`seal` and the R6 `close_restrict`, `emergency_restrict` contradict the production order.
+
+| # | Fact | Citation |
+|---|---|---|
+| O1 | The three R9 methods are called only in `Runtime::close` / `close_report`, and `close` only on `hands-close`, which spawns only if `reader_done`: the reader thread has finished and been joined | `hands.rs:734`, `:740`, `:794`, `:1390`, `:1401-1418`; `terminal.rs:1204-1217` |
+| O2 | EOF, partial+EOF, master close and a read failure fail the ingress; the spawn needs `!ingress.failed()` | `terminal.rs:534-537`, `:1404-1406`, `:1434-1436`; `hands.rs:1406` |
+| O3 | Every production `SessionIngress::accept` / `::emergency` call is on the one reader thread (`hands-input`, `read_input`): `accept` in `receive`, `emergency` only via `StopRoute::press`; the EMERGENCY bit is set only in `emergency()` | `terminal.rs:516-535`, `:571`, `:1105`, `:1389`, `:1405`, `:1435`; `stop.rs:88-91`; `h:1641-1663`, `:1724-1725` |
+
+`close_caller_findings` (`mother/src/oracles/route_seams_guard.rs`; rule test
+`sb3e_u20a_close_callers`) checks them over the tokens of every production source of
+Mother: all but the exact paths in `CALLER_EXCLUDED` (with the test modules loaded by
+`#[path]`, named) and the modules declared under `#[cfg(test)]` at their default path.
+Every occurrence of a guarded callee (a call, a method value, a `use` alias; same-named
+locals and fields too), but its own `fn`, and one level up the callers of
+`receive`, `goal_line`, `route_read`, `read_input`, `close` and `close_report`, must equal
+`CLOSE_CALLERS`; the crate-private and private callees must stay that narrow. It fails on
+(a) the R9 path, (b) `accept`/`emergency`, (c) the reader path, (d) U21a's O1 rule read
+through `order_findings`, (e) a shipped host file using any `legacy_*` module (plants
+`u20a_p1`-`p10`, `u21a_p12`); if it fails, every row below reopens as set B. It reads
+Mother only; governed-control calls none of these methods (`h:1018`, `:1641`, `:1694`).
+
+**TR-1, `hold:unreachable_by_production_order` (never a credit):** x:205-211
+close_obligations, x:377-383 producer_join, x:501-507 seal (each CR, LF, CRLF, EOF,
+partial_Ctrl_D, master_close, read_failure; O1, and O2 for the last four; with a live
+reader the seal refuses `seal:producers`, `close.rs:390-392`); x:235-241 close_restrict
+and x:269-275 emergency_restrict (O3: the thread held at the sink is the reader, so no
+byte is read until it returns; x:269-271 also stand over the `c:` citation).
+
+**W1-type (R199 Q-U21-4), open for U22's list:** repeated and quit at x:213, 218
+(close_obligations), 385, 390 (producer_join), 508, 514 (seal): O1, O3; at x:243, 248
+(close_restrict) and 277, 282 (emergency_restrict): O3, a second Stop or Quit while the
+reader is held would need a second reader.
+
+**Kept credits (F-S0-C):** x:575, 577, 584, 600, 647, 705: reached by harness press;
+production order O1/O3 (the real `ingress.emergency()` on the real session while held).
+
+**Ledger by key:** W1 (15): mission_stop x:214, 244, 278, 386, 510; stop_all x:215, 245,
+279, 387, 511; grant_revocation x:220, 250, 284, 392, 516. W3 (52): original_cell_unscheduled
+x:212, 242, 276, 384, 509; door_fence x:216, 246, 280, 388, 512; fatal x:217, 247, 281, 389,
+513; budget x:219, 249, 283, 391, 515; grant_expiry x:221, 251, 285, 393; Normal x:583, 598;
+ClosedUnclean x:578; fault none x:756, 764, 773, 804, 841; record_failed x:757, 842;
+record_unknown x:759, 845; panic x:760, 767, 776, 806, 844; poison x:805; schedule x:866,
+867, 870, 871, 875, 876, 887, 888, 905, 906. **F-S0-B (binding, R214):** a bare terminator
+rendered the frozen close byte rows byte-equal through `read_ack`'s bare arm (x:205, 235,
+377). Closed by U19b-1's renderer tie guard (reader.rs `tied`, called in witness.rs's read
+arm; 14.20 F7): a byte row's value admits exactly one reader value, so a bare terminator
+renders `ack=unread[..]` for every byte row; the bare-terminator plants are
+`u19b1_p_bare_d_register` and `u19b1_p_bare_d_call` (closes U19a's R202 C1).
+
+### 14.20 SB-3E U19b-1: registration install and metadata gates (SB3E-R216, R216.1)
+
+**Credited (44, set B; real reader composed as hands.rs:1119, :1157 compose it; the
+registration worker stands for `hands-startup`, hands.rs:1114-1180).**
+
+| Rows | Sink | Value | How |
+|---|---|---|---|
+| x:405-410 | registration_install | CR, LF, CRLF, EOF, partial_Ctrl_D, master_close | typed on the reader while `model.install.before` (model.rs:319) is held; C1 `want` = {model_stopped, model_cancelled} (the bound Stop races, F9) |
+| x:413, 416 | registration_install | repeated, quit | applied while held; `want` = model_cancelled |
+| x:653-656 | registration_install | Emergency, Failed, ClosingNormal, ClosingRestricted | applied while held; `want` = model_cancelled |
+| x:453-458, 465-470, 477-482, 489-494 | registration_show / status / tags / version | the six byte values | typed while the row's own ord of `model.gate.checked` (model.rs:243) is held on the kernel's `nexus-model-exchange` thread (exchange.rs:187-189); `want` = model_cancelled |
+| x:461, 464, 473, 476, 485, 488, 497, 500 | the same four | repeated, quit | applied while held |
+
+**Refusal records (R216 F2, R216.1 F-B2).** `reg:cas` is an S1 note at the gate CAS refusal
+(model.rs:244-249); `reg.admission` is an S1 *entry*, not a note, at the install admission
+refusal (model.rs:321-327; route_seams.rs `POINTS`), because a note there would render as a
+branch note in the 13 credited registration_record rows, whose path refuses the install
+afterwards (R199 Q-U21-1). Both are `#[cfg(mother_route_seams)]`; ship builds are unchanged.
+Tokens `note:admission` and `note:cas` bind each only after the cell's acknowledgement, on its
+thread (witness.rs `after_ack`). Inverse controls: `ctl_registration_install` and
+`ctl_registration_{version,status,tags,show}` fail if either record appears on the admitted
+path (s5.rs `reg_drive`).
+
+**TR-1 (independently reviewed, data commit).**
+- x:405-410: `ledger=+0:all[s=S]` → `+1:emergency_stop[s=S]` (the bound Stop's record, as
+  14.17; the R202 S1 whole-window clause applies).
+- Every tagged row of registration_show, _status, _tags and _version (the 32 credited rows
+  and 36 uncredited ones: x:459-460, 462-463, 471-472, 474-475, 483-484, 486-487, 495-496,
+  498-499, 680, 685, 690, 695, 829, 831-832, 834-835, 837-838, 840, 897-904): the entry tag
+  `kind=<name>` → `kind=metadata`, and the check tag loses its `kind` key; the ord is kept.
+  The table verifier binds the identity per sink (session_model_bridge.rs `expected_identity`,
+  `check_identity`), so the sink's rows change together. S1 records only `chat` or
+  `metadata` (route_seams.rs:128-132),
+  and a held-and-refused request is never sent (exchange.rs:295), so its name is not
+  observable. **The request name of a row comes from its ord in the kernel's fixed metadata
+  sequence, not from an observation:** ord 1 `/api/version` (ollama.rs:249), ord 2
+  `/api/status` (:265), ord 3 `/api/tags` (:285), ord 4 `/api/show` (:314), called in that
+  order by `VerifiedOllama::verify` (ollama.rs:103-104). Fail safe: every metadata request
+  passes the same gate and refusal path.
+
+**F7 (R214 F-S0-B, binding).** The renderer ties a byte row's value to exactly one reader
+value (reader.rs `tied`: CR `stop0d`, LF `stop0a`, CRLF `stop0d0a`, EOF `04`, partial
+`partial+04`, master_close, read_failure); a bare terminator renders `ack=unread[..]`. This
+closes U19a's R202 C1 and C3 ledger items.
+
+**Ledger by key, not credited (W1 5, W3 34; the mission's "4 W1, 26 W3" is corrected by
+`rows.py`).** read_failure x:411, 459, 471, 483, 495 (GB4b, R46.3). W1:
+stop_all x:414, 462, 474, 486, 498. W3: original_cell_unscheduled x:412, 460, 472, 484, 496;
+fatal x:415, 463, 475, 487, 499; Bootstrap x:652, 680, 685, 690, 695; fault none x:809, 829,
+832, 835, 838; panic x:831, 834, 837, 840; schedule x:889, 890, 897-904. **A guard row is owed
+if the kernel's metadata sequence (ollama.rs:103-104, :249-314) ever becomes dynamic.**
+
+**Rule for later call rows (R216 F1).** The R5 call rows (U19a's x:86-91 and 534-537, and
+U19b-2's) are credited as harness-composition evidence: production makes no model call before
+M-5b (hands.rs:1339-1350). Binding on M-5b: a production-order guard (the page call runs on a
+worker or exchange thread, never the reader; the reader stays live until after the work join,
+hands.rs:1390-1391; Stop is bound before the run, hands.rs:1157), a re-run of every call row on
+M-5b's composition, and U22's set-B check re-run after M-5b and before O-4.
+
+### 14.21 SB-3E U19b-2: model-call metadata sinks (SB3E-R216, R216.1, R217)
+
+**Credited (36, set B), harness composition until M-5b.** Each cell drives the real call sink
+code on the real session through the harness's own model lane (`s5.rs` `ModelLane`); the
+shipped binary makes no model call before M-5b (`hands.rs:1339-1350`). The call's ords 1-3
+are `check_runtime`'s metadata requests (`ollama.rs:137`; `/api/version` :249, `/api/status`
+:265, `/api/tags` :285), before its charge (:138). Each row is held at its own ord from the
+call's first arrival (`s5.rs` `called`, as `ord3_quit`).
+
+| Rows | Sink (ord) | Value | How |
+|---|---|---|---|
+| x:154-159, 137-142, 120-125 | call_version (1), call_tags (3), call_status (2) | CR, LF, CRLF, EOF, partial_Ctrl_D, master_close | typed on the reader (`Reading`, as hands.rs:1119, :1157) while the ord's `model.call.observed` is held |
+| x:162, 167, 145, 150, 128, 133 | the same | repeated, quit | applied while held |
+| x:557-560, 552-555, 547-550 | the same | Emergency, Failed, ClosingNormal, ClosingRestricted | reached while the ord's `call.gate` is held |
+
+**F1 (binding on M-5b, restated).** Every credited call row is "harness composition until
+M-5b": U5's x:93-96, 98, 99; U19a's x:86-91, 534-537; these 36; and U19c's 5 identity and
+bind rows x:298, 307, 312, 607, 608 (14.23). M-5b owes: a production-order guard (the page call
+and the identity and bind sinks run on a worker or exchange thread, never the reader; the reader
+stays live until after the work join, hands.rs:1390-1391; Stop is bound before the run,
+hands.rs:1157); a re-run of each of those 57 rows, by key, on M-5b's own composition; U19c's 15
+open rows (x:286-291, 294, 606, 609, S2; x:299-304, F5) run there first; and U22's set-B check
+re-run after M-5b and before O-4.
+
+**Harness pieces (R216 F6).** The ord-n profile (`refused_at`: `n` gates, no charge or settle,
+no charge position); INV bound by the Builder's `mother.recheck` of S and Q
+(`model_calls.rs:491`; CORRELATIONS row `recheck`), since `mother.charge.entry` follows ord 3;
+`next` key `charge_append`, the Builder's entries into the next sink (`mother.charge.entry`,
+`model_calls.rs:216`); `CAS:m:774` and `note:8` at the row's kind and ord (U5's chat keeps
+`chat`, 4); T6 at the row's ord (the ord-n metadata gate and the Builder's `mother.recheck`,
+where the chat and the charge do not exist). C1: the advance must end `Err(Stopped)` (every
+value, measured; a bare terminator gives `Ok`), the controls `Ok`. F7: every byte row passes
+`reader::tied`; plant `u19b2_p_bare_d_call_b` types a bare CR. main.rs raises
+`recursion_limit` to 256 (the manifest's 157 entries).
+
+**TR-1, kind (R216.1 F-B1 rule; data commit).** A held-and-refused request is never sent
+(exchange.rs:295), so its name is not observable; S1 records `metadata` (route_seams.rs:128-132).
+Every tagged row of call_version, call_status and call_tags (78: x:120-170, 546-560, 737-738,
+740-742, 744-746, 748, 856, 858, 860): the entry tag `kind=<name>` becomes `kind=metadata`,
+the check tag loses `kind`, the ord is kept. The name comes from the ord in the fixed sequence
+above, not from an observation.
+
+**Ledger by key, not credited (W1 9, W3 30; the mission's "38 W3" is 30 by `rows.py`).**
+read_failure x:126, 143, 160 (GB4b, R46.3). W1: mission_stop x:129, 146, 163; stop_all x:130,
+147, 164; grant_revocation x:135, 152, 169. W3: original_cell_unscheduled x:127, 144, 161;
+door_fence x:131, 148, 165; fatal x:132, 149, 166; budget x:134, 151, 168; grant_expiry x:136,
+153, 170; Normal x:546, 551, 556; fault none x:737, 741, 745, poison x:738, 742, 746, panic
+x:740, 744, 748; schedule before x:856, 858, 860. W2 unchanged: decline x:739, 743, 747; hold
+x:857, 859, 861.
+
+### 14.22 SB-3E U20b: cancel_run credits and the door_halt disposition (SB3E-R226)
+
+**Credited (12, set B): real sink, harness worker; production order measured by the retained
+control.** x:171-176 (CR, LF, CRLF, EOF, partial_Ctrl_D, master_close: typed on the real reader,
+`Reading` as hands.rs:1119, :1157, `reader::tied` applying, F-D), x:179, 184 (repeated, quit) and
+x:562-565 (Emergency, Failed, ClosingNormal, ClosingRestricted), applied while held. Each drives
+`SessionDoor::cancel_run` (host_session.rs:1400-1419, held at `door.cancel_run`, :1405) on the real
+session's door and File run, called by a harness worker (`s5.rs` `d_cancel`, the `closed` pattern)
+for production's `withdraw_lite` (`mother/src/adapter/lite_port.rs:167-170`), whose own writes race
+in the window (F-E). C1 (R194): the sink returns `Ok`; the acknowledgement is the worker's, of S, Q
+and RUN (`door_ack`). **Production order (F-A):** `report::route_report_decline_holds_cancel_run_off_the_reader`
+runs production `hands::run` (File mode, `approve` declined: hands.rs:386-402, coordinator.rs:1738,
+coordinator/lite_settle.rs:468-504), held at the first `door.cancel_run` on `hands-work`
+(hands.rs:1360) while the reader lives (until hands.rs:1390). It fails unless the hold is on a worker
+(not the reader, nor `hands::run`'s or the test's thread), the reader reads `stop` and presses exactly
+one `ingress.emergency` while it stands, and `status` shows `session=Emergency`. **F-F (ledger
+note):** x:179, 184, 562-565 apply with no bound Stop route, so their ledger is the frozen `+0`; in
+production the bound Stop adds one `emergency_stop` record (U19a's lifecycle class).
+
+**TR-1 (F-C).** x:171-176: `ledger=+0:all[s=S]` → `+1:emergency_stop[s=S]` (the bound Stop,
+hands.rs:1157, as 14.17; R202 S1 whole-window clause and its control). x:177 waits for GB4b.
+
+**door_halt: W3 by event (F-B; R197 Q-U21-4), table rows kept `open` for U22's W3 report.**
+
+| Rows | Event entering the sink | Static proof and guard |
+|---|---|---|
+| x:252-257 (CR, LF, CRLF, EOF, partial_Ctrl_D, master_close) | failed journal append; poisoned port mutex | below; `door_caller_findings` |
+| x:260, 265 (repeated, quit) | the same | the same |
+| x:591-594 (Emergency, Failed, ClosingNormal, ClosingRestricted) | the same | the same |
+
+Static proof for each: `SessionDoor::halt` (host_session.rs:1429-1439) is called
+only by `PortDoor::halt` (`mother/src/adapter/session_port.rs:127-130`), called only in
+`GovernedPort::locked`'s poison arm (`mother/src/adapter/mod.rs:376`, a panic under the port mutex)
+and `GovernedPort::fence` (:895), reached only through the coordinator's closure (coordinator.rs:1119),
+invoked only on a failed journal append (coordinator.rs:754-763): internal faults, never an Owner act
+(Step 0: 0 entries in 120 runs). Guard `door_caller_findings` (route_seams_guard.rs; rule test
+`sb3e_u20b_door_callers`; U20a's scoping and walk `production_sites`): every production `halt` and
+`fence` identifier but its `fn` (R214.3 D1, R231 S1) equals `DOOR_CALLERS`, the pinned sites inside
+their arms and forms (`DOOR_ARMS`, `DOOR_FORMS`: the poison arm, `(self.fence)()` in the append-failure
+arm, the closure `fence: Box::new(move || fencer.fence())`). It fails on (a) another `halt`, (b) another
+`fence` or one outside its arm or form, (c) another `halt` in `mother/host/src`; then the 12 rows above
+(and x:258, under read_failure) reopen as set B.
+
+**Ledger by key.** read_failure x:177, 258 (GB4b). W1 (U22): mission_stop x:180, 261; stop_all
+x:181, 262; grant_revocation x:186, 267. W3 (29): original_cell_unscheduled x:178, 259; door_fence
+x:182, 263; fatal x:183, 264; budget x:185, 266; grant_expiry x:187, 268; Normal x:561, 590;
+SealedFinalizing x:566, 595; ClosedClean x:567, 596; ClosedUnclean x:568, 597; fault none x:749, 769;
+decline x:750; poison x:751, 771; panic x:752, 772; schedule x:862, 863, 873, 874. W2: x:6-9, 770.
+
+### 14.23 SB-3E U19c: identity_view and inference_binding (SB3E-R228)
+
+**Credited (5, set B), harness composition until M-5b (F1).** Every shipped lane has model cap 0
+(hands.rs:172-187, lane.rs:146-148), so the shipped binary never reaches `model_identity`
+(coordinator.rs:1866) or `admit_inference` (:1915). Each cell drives the real sink on the real
+session through the harness's own model lane (`s5.rs` `identified`, section `s5_ident.rs`).
+
+| Rows | Sink | Value | Held at | C1: last step, mission end |
+|---|---|---|---|---|
+| x:298, 607, 608 | identity_view | quit, Failed, ClosingNormal | the advance's first `identity` (model.rs:619) | `Err(Stopped)`, `Block { reason: ModelNotPinned }` |
+| x:307 | inference_binding | repeated | its first `model.bind.checked` (run.rs:2330) | `Err(Stopped)`, `Stop { reason: EmergencyStop }` |
+| x:312 | inference_binding | quit | the same | `Err(Stopped)`, `Block { reason: ModelAdmissionRefused }` |
+
+**Refusal notes (F2).** `identity:scope_live` at the live refusal (model.rs:620-625) and
+`bind:cas` at the CAS refusal (run.rs:2332-2336, `inspect_err`), each
+`#[cfg(mother_route_seams)]`; ship builds are unchanged (A5 re-pin, judged by the Architect).
+Token `note:scope_live` binds the note after the acknowledgement on its thread. F4 (option C):
+`note:cas@r:2301` is keyed by the whole branch text, so it is not U19b-1's `note:cas`. **S1:**
+it also requires that no `bind.done` of the run follows the note on its thread
+(witness.rs `bind_refused`). Inverse controls `ctl_identity_view` and `ctl_inference_binding`
+(held, released, the sink passes) fail if either note fires on the admitted path.
+
+**Harness pieces (`collect_pre`).** The window opens at the hold's acknowledgement; RUN is the
+session's own native `run_opened` (exactly one; ATT is never bound); the no-call profile (no
+counted call, attempt site, opening or binding entry, as `credit_close`, and no Builder lane);
+T6 at the row's entry point (`identity`, `bind.entry`); the ack rule: acknowledged on the
+advancing worker, never the reader or the harness, of S and Q (`identity`) or of RUN
+(`model.bind.checked`; rule test `route_s5_pre_ack_binds_the_advancing_worker`); C1 as above;
+the settle barrier (F5): the window closes only after the advance has returned and no stop
+event of the session is pending or in flight (the bound Stop's worker has finished). S at
+`model.bind.checked` and `bind:cas` is bound by CORRELATIONS `bindentry` (an earlier
+`bind.entry` of S and Q of the run on that thread).
+
+**TR-1 (independently reviewed; data commit).**
+- T1: all 29 d_identity rows `[s=S run=RUN inv=INV]` → `[s=S q=Q]` (group suffix kept), and
+  DRIVER_KEYS `d_identity=s,q`: `identity` records S and Q only (host_session.rs:89-91), and the
+  refused path ends before the Builder's reservation (coordinator.rs:1884-1887, :1891).
+- T3: all 33 d_bind rows drop `inv` (`[s=S run=RUN]`, `d_bind=s,run`; R216.1 F-B1 pattern).
+- T2 (F5): the 5 credited ledgers `+0:all[s=S]` → `+1:MissionEnd[s=S],+1:run_cancelled[s=S]`
+  under the R202 S1 whole-window clause (the named counts must sum to the window, else
+  ` of <whole>`). LEDGER gains `MissionEnd` (the journal's Stop, Block or Fail transition) and
+  native `run_cancelled`; `+N:all` stays refused. The settle barrier runs on the typed path only
+  (the held-out byte rows and the rule test); the five credited rows have no bound Stop route,
+  the harness thread applies the value, and every window record is written on the advancing
+  worker before it is joined, so their ledger is deterministic by construction (identical in 10
+  sequential, 10 parallel and 11 whole-lane runs; R233 C2).
+
+**Not credited, M-5b (F5, S2).** The six bind byte rows x:299-304 still vary after the barrier:
+the bound Stop's worker and the coordinator's `door.cancel_run` race to cancel the run, and when
+the worker wins no `run_cancelled` is written (x:299 in 2 of 11 whole-lane runs, x:301 in 1;
+the other four share the mechanism). The nine identity stop-class rows x:286-291, 294, 606, 609
+stay open (S2: no harness-visible fact depends on the sink's return on the stop class).
+identity_view and inference_binding then have no credited byte row, so no bare-terminator plant
+applies (F-S0-B).
+
+**Ledger by key.** read_failure x:292, 305 (GB4b). W1: stop_all x:295, mission_stop x:308,
+stop_all x:309 (U22). W3: x:293, 296, 297, 605, 610-612, 777, 778, 780, 877, 878 (identity) and
+x:306, 310, 311, 313, 613, 781, 784, 879, 880 (bind). W2 unchanged: hold x:2-5, 314, 315,
+614-620, 783; amend x:779, 782.
+
+**Re-anchored plants (R59.2, data).** Eleven earlier rows whose `old` text U19c's code moved keep
+their mutation, tests and expect: the seven main.rs terminal-arm rows (now with U19c's two
+`ctl!` entries), u5a_passive_store_commit and u19a_p1/p2 (widened to a unique span), and
+u19a_p_tr1_whole_window_dropped (the new whole-window clause made dead, as before).

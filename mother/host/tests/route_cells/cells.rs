@@ -5,8 +5,11 @@
 // (SB3E-R120.1), U9b's five R6 held-sink lifecycle cells (SB3E-R135) and
 // SEAM-1's three registration_reserve and three registration_readiness
 // ingress cells and the R9 primary_end lifecycle cell (SB3E-R139), and
-// U21a's five R9 close_report cells (SB3E-R197, R199). The
-// route_cells lane compiles it through
+// U21a's five R9 close_report cells (SB3E-R197, R199), U19b-1's twelve
+// R0 registration_install and 32 R5 metadata-gate cells (SB3E-R216) and
+// U19b-2's 36 R5 call cells refused at ords 1-3 (SB3E-R217), U20b's twelve
+// R6 cancel_run cells (SB3E-R226) and U19c's three R1 identity_view and two
+// R2 inference_binding cells (SB3E-R228). The route_cells lane compiles it through
 // `macro_rules! cells` in main.rs, whose terminal arm is the control
 // `ctl_call_chat`; session_model_bridge.rs and check-citations.py parse it
 // as text. One entry per credited cell: `<route> <sink> <dim> <value>;`
@@ -89,4 +92,101 @@ cells! {
     r9 close_report fault none;
     r9 close_report schedule before;
     r9 close_report schedule after;
+    r0 registration_install ingress CR;
+    r0 registration_install ingress LF;
+    r0 registration_install ingress CRLF;
+    r0 registration_install ingress EOF;
+    r0 registration_install ingress partial_Ctrl_D;
+    r0 registration_install ingress master_close;
+    r0 registration_install ingress repeated;
+    r0 registration_install ingress quit;
+    r0 registration_install lifecycle Emergency;
+    r0 registration_install lifecycle Failed;
+    r0 registration_install lifecycle ClosingNormal;
+    r0 registration_install lifecycle ClosingRestricted;
+    r5 registration_version ingress CR;
+    r5 registration_version ingress LF;
+    r5 registration_version ingress CRLF;
+    r5 registration_version ingress EOF;
+    r5 registration_version ingress partial_Ctrl_D;
+    r5 registration_version ingress master_close;
+    r5 registration_version ingress repeated;
+    r5 registration_version ingress quit;
+    r5 registration_status ingress CR;
+    r5 registration_status ingress LF;
+    r5 registration_status ingress CRLF;
+    r5 registration_status ingress EOF;
+    r5 registration_status ingress partial_Ctrl_D;
+    r5 registration_status ingress master_close;
+    r5 registration_status ingress repeated;
+    r5 registration_status ingress quit;
+    r5 registration_tags ingress CR;
+    r5 registration_tags ingress LF;
+    r5 registration_tags ingress CRLF;
+    r5 registration_tags ingress EOF;
+    r5 registration_tags ingress partial_Ctrl_D;
+    r5 registration_tags ingress master_close;
+    r5 registration_tags ingress repeated;
+    r5 registration_tags ingress quit;
+    r5 registration_show ingress CR;
+    r5 registration_show ingress LF;
+    r5 registration_show ingress CRLF;
+    r5 registration_show ingress EOF;
+    r5 registration_show ingress partial_Ctrl_D;
+    r5 registration_show ingress master_close;
+    r5 registration_show ingress repeated;
+    r5 registration_show ingress quit;
+    r5 call_version ingress CR;
+    r5 call_version ingress LF;
+    r5 call_version ingress CRLF;
+    r5 call_version ingress EOF;
+    r5 call_version ingress partial_Ctrl_D;
+    r5 call_version ingress master_close;
+    r5 call_version ingress repeated;
+    r5 call_version ingress quit;
+    r5 call_version lifecycle Emergency;
+    r5 call_version lifecycle Failed;
+    r5 call_version lifecycle ClosingNormal;
+    r5 call_version lifecycle ClosingRestricted;
+    r5 call_status ingress CR;
+    r5 call_status ingress LF;
+    r5 call_status ingress CRLF;
+    r5 call_status ingress EOF;
+    r5 call_status ingress partial_Ctrl_D;
+    r5 call_status ingress master_close;
+    r5 call_status ingress repeated;
+    r5 call_status ingress quit;
+    r5 call_status lifecycle Emergency;
+    r5 call_status lifecycle Failed;
+    r5 call_status lifecycle ClosingNormal;
+    r5 call_status lifecycle ClosingRestricted;
+    r5 call_tags ingress CR;
+    r5 call_tags ingress LF;
+    r5 call_tags ingress CRLF;
+    r5 call_tags ingress EOF;
+    r5 call_tags ingress partial_Ctrl_D;
+    r5 call_tags ingress master_close;
+    r5 call_tags ingress repeated;
+    r5 call_tags ingress quit;
+    r5 call_tags lifecycle Emergency;
+    r5 call_tags lifecycle Failed;
+    r5 call_tags lifecycle ClosingNormal;
+    r5 call_tags lifecycle ClosingRestricted;
+    r6 cancel_run ingress CR;
+    r6 cancel_run ingress LF;
+    r6 cancel_run ingress CRLF;
+    r6 cancel_run ingress EOF;
+    r6 cancel_run ingress partial_Ctrl_D;
+    r6 cancel_run ingress master_close;
+    r6 cancel_run ingress repeated;
+    r6 cancel_run ingress quit;
+    r6 cancel_run lifecycle Emergency;
+    r6 cancel_run lifecycle Failed;
+    r6 cancel_run lifecycle ClosingNormal;
+    r6 cancel_run lifecycle ClosingRestricted;
+    r1 identity_view ingress quit;
+    r1 identity_view lifecycle Failed;
+    r1 identity_view lifecycle ClosingNormal;
+    r2 inference_binding ingress repeated;
+    r2 inference_binding ingress quit;
 }

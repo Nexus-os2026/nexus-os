@@ -2328,7 +2328,12 @@ impl RunRegistry {
         super::file_session::probe(Some(b.original), "model.bind.checked");
         #[cfg(mother_route_seams)]
         route_seams::at("model.bind.checked", Ctx::default().run(b.run));
-        b.original.admit()?; // Q's real same-word CAS, idempotent success included.
+        // Q's real same-word CAS, idempotent success included.
+        b.original.admit().inspect_err(|_| {
+            // U19c (SB3E-R228 F2): the CAS refusal's own route note.
+            #[cfg(mother_route_seams)]
+            route_seams::note("bind:cas", Ctx::default().run(b.run));
+        })?;
         if fresh {
             let entry = table
                 .runs

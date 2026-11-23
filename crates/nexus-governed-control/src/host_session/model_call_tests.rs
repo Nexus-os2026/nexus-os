@@ -1457,13 +1457,13 @@ ind,ScopeKind::Bootstrap)||scope.session!=core.identity||!scope.core.ptr_eq(&Arc
 )||scope.admit(&core.cell).is_err(){ note(reg:scope_admit,scope.route_ctx());¦.is_err(){¦returnEr\
 r( >fnadmission(&self\
 ,state:&State)->Result<(),ModelError>{>implRegistrationGate<'_>{ at(model.gate.checked,self.sco\
-pe.route_ctx());¦e.cell),);¦self.scope >fnadmit_request(&self,kind:RequestKind)->Result<(),Mode\
+pe.route_ctx());¦e.cell),);¦self.scope +self.scope.admit(&self.core.cell).map_err(|_|{ note(reg:cas,self.scope.route_ctx());¦p_err(|_|{¦ModelError >fnadmit_request(&self,kind:RequestKind)->Result<(),Mode\
 lError>{>implCallCancelforRegistrationGate<'_>{ at(model.gate.before,self.scope.route_ctx().kin\
 d(kind));¦e.cell),);¦ifkind!=Re >pub(super)fnregister_model_private(&self,endpoint:&str,spec:&M\
 odelPinSpec,)->Result<ModelIdentityView,SessionError>{>implHostSession{ at(model.reserved,self.\
 bootstrap.scope.route_ctx());¦e.cell),);¦letmutreco +letresult=(||{ at(model.record.before,self\
 .bootstrap.scope.route_ctx());¦e.cell),);¦letsequenc at(model.install.before,self.bootstrap.sco\
-pe.route_ctx());¦e.cell),);¦letmuts=ho at(model.install.after,self.bootstrap.scope.route_ctx())\
+pe.route_ctx());¦e.cell),);¦letmuts=ho +gate.admission(&s).map_err(|e|{>letresult=(||{ at(reg.admission,self.bootstrap.scope.route_ctx());¦p_err(|e|{¦model_erro +letresult=(||{ at(model.install.after,self.bootstrap.scope.route_ctx())\
 ;¦e.cell),);¦#[cfg(test >pub(super)fnacquire(core:&Arc<Core>,authority:&Authority,(run,agent,gr\
 oup,identity):(RunId,&AgentId,GroupId,[u8;32]),original:&HaltCell,grant:&OriginalGrant<'_>,invo\
 cation:&InvocationObserver,)->Result<Self,AuthorityError>{>implAttempt{ at(attempt.slot,Ctx::se\
@@ -1476,7 +1476,7 @@ Result<(),SessionError>{>implAttempt{ at(complete,self.route_ctx());¦ionError>{
 ty:[u8;32],)->Result<(),crate::authority::AuthorityError>{>implSessionDoor{ at(bind.entry,self.\
 context.scope.route_ctx().run(run));¦Halted);};¦if!self.co >pub(super)fnmodel_identity_private(\
 &self)->Option<ModelIdentityView>{>implSessionDoor{ at(identity,self.context.scope.route_ctx())\
-;¦urnNone;};¦if!self.co >fnpredicates(&self,kind:RequestKind)->Result<(),Refusal>{>implCallGate\
+;¦urnNone;};¦if!self.co +if!self.context.scope.live(self.core.cell.session_word()){ note(identity:scope_live,self.context.scope.route_ctx());¦n_word()){¦returnNone >fnpredicates(&self,kind:RequestKind)->Result<(),Refusal>{>implCallGate\
 <'_>{ at(model.call.sampled,self.route_ctx(kind));¦e.cell),);¦letruns=se +lethold=runs.try_requ\
 est_hold().map_err(|poisoned|{ note(refused:hold,self.route_ctx(kind));¦t.fail();}¦(,Cancelle +\
 ifexpired{ note(refused:1.expired,self.route_ctx(kind));¦ifexpired{¦returnErr( +ifjudged==Err(c\
@@ -1549,7 +1549,7 @@ nsettle_session_attempt(&self,ticket:SessionAttempt,deadline:Instant,)->Result<(
 r>{>implRunRegistry{ at(model.settle.before,Ctx::default().run(ticket.run).attempt(ticket.ordin\
 al),);¦t.cell),);¦letmuttabl >pub(crate)fnadmit_session_inference(&self,b:SessionBinding<'_>,)-\
 >Result<(),AuthorityError>{>implRunRegistry{ at(model.bind.checked,Ctx::default().run(b.run));¦\
-iginal),);¦b.original at(bind.done,Ctx::default().run(b.run));¦mission);}¦Ok(())}}#[
+iginal),);¦b.original +b.original.admit().inspect_err(|_|{ note(bind:cas,Ctx::default().run(b.run));¦t_err(|_|{¦})?;iffres = at(bind.done,Ctx::default().run(b.run));¦mission);}¦Ok(())}}#[
 evidence_store.rs: >fnappend(&mutself,phase:&str,commitment:Option<&str>,body:&str)->Append{>im\
 plInner{ +#[cfg(mother_route_seams)]ifself.route_refused(kind,phase,commitment){ note(store.ref\
 used,Ctx::store(kind,phase,commitment));¦mmitment){¦ifrolled_b = at(store.commit,Ctx::store(kin\
@@ -2351,7 +2351,7 @@ fn sb3e_route_sites_are_exactly_the_inventory() {
     let mut points: Vec<&str> = points.collect();
     points.sort_unstable();
     points.dedup();
-    let listed = seams.split("POINTS: [&str; 35] = [").nth(1).unwrap();
+    let listed = seams.split("POINTS: [&str; 36] = [").nth(1).unwrap();
     let listed = listed.split("];").next().unwrap().split('"');
     let mut listed: Vec<&str> = listed.skip(1).step_by(2).collect();
     listed.sort_unstable();

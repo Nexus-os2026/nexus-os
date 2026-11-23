@@ -306,7 +306,7 @@ delivery|sb3_mother_post_seal_model_events_are_absent
 /// the verifier compares them. It shows consistency, not that a test ran.
 const CELLS_RS: &str = include_str!("route_cells/cells.rs");
 const EXPECT: &str = include_str!("session/model-bridge-expect.tsv");
-const EXPECT_SHA256: &str = "9734c723e752aceeaf0fea63b44422a9037f172188a79ffb7658b907a438bbcf";
+const EXPECT_SHA256: &str = "7c1ce670e8e4ea12179608a7b93f188b48e8c82a9e0474342c918c0677f26af8";
 const UNIVERSE_SHA256: &str = "a6a5337538a92d273dd2efdcaedcf76843bbf2f3ddc6be1f6f44f3c241985fd2";
 const EXPECT_HEADER: &str = "route\tsink\tdim\tvalues\tmech\tsetup\tdriver\tentry\tcheck\texit\texec\tapply\texpect\twitness\tcontrol\tplant\trefs\tstatus";
 /// R4: `reader:` is these literal bytes, or one of the three closed paths.
@@ -320,7 +320,7 @@ const BYTE_APPLY: [(&str, &str); 7] = [
     ("read_failure", "read_failure"),
 ];
 /// R5.3: which identity keys a driver's trace entries carry (design 2.3).
-const DRIVER_KEYS: &str = "d_register=s,q d_bootstrap=s d_identity=s,run,inv d_bind=s,run,inv \
+const DRIVER_KEYS: &str = "d_register=s,q d_bootstrap=s d_identity=s,q d_bind=s,run \
     d_call=s,q,run,inv,att d_lane=s,run,inv d_cancel=s,run d_halt=s d_stop=s d_quit=s,q \
     d_close=s host=s";
 /// Real S2/shim record selectors (design 4.2.1); `none` is not one.
@@ -328,7 +328,8 @@ const RECORDS: &str = "model_registered model_call";
 /// R6.3: `record=keys` a delta must carry, of those the driver's identity has.
 /// Mother's `SessionClosed` is not native `session_closed`; `+0:all` is empty.
 const LEDGER_RECORDS: &str = "ModelCallCharged=inv LaneReturned=inv model_call=run,att \
-    model_registered=s,q session_closed=s SessionClosed=s all=s emergency_stop=s";
+    model_registered=s,q session_closed=s SessionClosed=s all=s emergency_stop=s \
+    MissionEnd=s run_cancelled=s";
 const LOCKS: &str = "ModelState EvidenceInner RunTable Coordinator Pending Producers Actions";
 const AMEND_REASON: &str = "NO_SUCH_EVENT_AT_THIS_BOUNDARY";
 /// Composed applicability oracles (6.2). None exists yet: U11 lists them.
@@ -345,6 +346,7 @@ fault|poison|record_first_classify,emergency_restrict,close_restrict,post_record
 const DENIAL_CELLS: &str = "lifecycle|SealedFinalizing,ClosedClean,ClosedUnclean|record_first_classify,post_record_recheck,lane_result_admission";
 /// SB3E-R7, literal: `route/sink/dim/value` where `hold:` may sit over a `c:`
 /// disposition. A `c:` citation never counts, so a held one stays unresolved.
+/// U20a (SB3E-R214 TR-1): rows 269-271 join it.
 const HOLD_ON_CITED: &str = "\
 R2/inference_binding/ingress/grant_revocation
 R2/inference_binding/ingress/grant_expiry
@@ -360,6 +362,9 @@ R9/close_obligations/fault/poison
 R5/call_version/schedule/after
 R5/call_status/schedule/after
 R5/call_tags/schedule/after
+R6/emergency_restrict/ingress/CR
+R6/emergency_restrict/ingress/LF
+R6/emergency_restrict/ingress/CRLF
 ";
 /// Design 4.4, literal: sinks|driver|entry|check|exit.
 const SINK_POINTS: &str = "\
@@ -577,9 +582,21 @@ fn expected_identity(row: &[String]) -> Result<String, String> {
         })
         .collect();
     if let Some((kind, ordinal)) = gate_ordinal(&row[1]) {
+        // SB3E-R216.1 F-B1 (TR-1): S1 records every gate's kind but the
+        // chat's as `metadata` (route_seams.rs:128-132); its name is the
+        // ord's (U19b-1: registration; U19b-2: call ords 1-3).
+        let kind = match row[1] == "call_chat" {
+            true => kind,
+            false => "metadata",
+        };
         parts.push(format!("kind={kind} ord={ordinal}"));
     }
     Ok(parts.join(" "))
+}
+/// SB3E-R216.1 F-B1: the check's identity; a metadata gate row's check
+/// carries no kind (its request is not observed; U19b-2: the call rows too).
+fn check_identity(row: &[String]) -> Result<String, String> {
+    Ok(expected_identity(row)?.replacen(" kind=metadata", "", 1))
 }
 /// Splits on `,` and drops nothing: a 4.4 column's literal point tokens.
 fn tokens(column: &str) -> Vec<&str> {
@@ -684,8 +701,10 @@ fn check_witness(row: &[String], at: &str) -> Result<Witness, String> {
     let identity = expected_identity(row)?;
     let entry = observation(seen["entry"], &identity, |p| p == row[7])
         .map_err(|e| bad(format!("entry {e}")))?;
-    let check = observation(seen["check"], &identity, |p| tokens(&row[8]).contains(&p))
-        .map_err(|e| bad(format!("check {e}")))?;
+    let check = observation(seen["check"], &check_identity(row)?, |p| {
+        tokens(&row[8]).contains(&p)
+    })
+    .map_err(|e| bad(format!("check {e}")))?;
     let unreached = status.starts_with("amend:") || status.starts_with("denial:");
     if entry.is_none() && !unreached {
         return Err(bad("entry observation is absent".into()));
@@ -1016,8 +1035,8 @@ fn check_expect_table(c: &Context) -> Result<(), String> {
     }
     let (amend, denial) = (listed_cells(AMEND_CELLS), listed_cells(DENIAL_CELLS));
     let cited: Vec<_> = HOLD_ON_CITED.lines().collect();
-    if cited.len() != 14 {
-        return Err(format!("HOLD_ON_CITED: {} entries, not 14", cited.len()));
+    if cited.len() != 17 {
+        return Err(format!("HOLD_ON_CITED: {} entries, not 17", cited.len()));
     }
     for entry in &cited {
         let f: Vec<_> = entry.split('/').collect();
@@ -2090,13 +2109,13 @@ fn sb3d_r3_d1_cells_are_executed_or_owned() {
             count("open:F1"),
             count("open:M2e-D")
         ),
-        (122, 0, 593, 1, 28),
-        "after D2, U5b's six, U9a's eleven, U6a-1's three, U9b's five, SEAM-1's seven, U19a's 40 and U21a's five credited cells: {summary:?}"
+        (219, 0, 536, 1, 28),
+        "after D2, U5b's six, U9a's eleven, U6a-1's three, U9b's five, SEAM-1's seven, U19a's 40, U21a's five, U19b-1's 44, U19b-2's 36, U20b's 12 and U19c's five credited cells: {summary:?}"
     );
     assert_eq!(
         count("cited"),
-        206,
-        "quit, fatal, six U9a cells, SEAM-1's primary_end SealedFinalizing and U19a's 534-537, 86-88, 665 and 417-419 moved to x:rc_"
+        166,
+        "quit, fatal, six U9a cells, SEAM-1's primary_end SealedFinalizing, U19a's 534-537, 86-88, 665 and 417-419, U19b-1's 653, 405-407, 453-455, 465-467, 477-479 and 489-491, and U19b-2's 120-122, 133, 137-139, 150, 154-156, 167, 547-550, 552-555 and 557-560 moved to x:rc_"
     );
 }
 
@@ -2108,8 +2127,11 @@ fn sb3d_r3_d1_cells_are_executed_or_owned() {
 /// three registration_readiness ingress cells, and the R9 primary_end
 /// lifecycle cell (row 642). U19a (SB3E-R198): sixteen lifecycle and 24 byte cells.
 /// U21a (SB3E-R197, R199): the five set-B R9 close_report cells (rows 580,
-/// 581, 761, 868, 869).
-const CREDITED: [&str; 77] = [
+/// 581, 761, 868, 869). U19b-1 (SB3E-R216): twelve registration_install and
+/// 32 metadata-gate cells. U19b-2 (SB3E-R217): 36 call cells at ords 1-3.
+/// U20b (SB3E-R226): twelve R6 cancel_run cells. U19c (SB3E-R228): three
+/// identity_view and two inference_binding cells.
+const CREDITED: [&str; 174] = [
     "r5/call_chat/ingress/original_cell_unscheduled",
     "r5/call_chat/ingress/repeated",
     "r5/call_chat/ingress/mission_stop",
@@ -2187,6 +2209,103 @@ const CREDITED: [&str; 77] = [
     "r9/close_report/fault/none",
     "r9/close_report/schedule/before",
     "r9/close_report/schedule/after",
+    "r0/registration_install/ingress/CR",
+    "r0/registration_install/ingress/LF",
+    "r0/registration_install/ingress/CRLF",
+    "r0/registration_install/ingress/EOF",
+    "r0/registration_install/ingress/partial_Ctrl_D",
+    "r0/registration_install/ingress/master_close",
+    "r0/registration_install/ingress/repeated",
+    "r0/registration_install/ingress/quit",
+    "r0/registration_install/lifecycle/Emergency",
+    "r0/registration_install/lifecycle/Failed",
+    "r0/registration_install/lifecycle/ClosingNormal",
+    "r0/registration_install/lifecycle/ClosingRestricted",
+    "r5/registration_version/ingress/CR",
+    "r5/registration_version/ingress/LF",
+    "r5/registration_version/ingress/CRLF",
+    "r5/registration_version/ingress/EOF",
+    "r5/registration_version/ingress/partial_Ctrl_D",
+    "r5/registration_version/ingress/master_close",
+    "r5/registration_version/ingress/repeated",
+    "r5/registration_version/ingress/quit",
+    "r5/registration_status/ingress/CR",
+    "r5/registration_status/ingress/LF",
+    "r5/registration_status/ingress/CRLF",
+    "r5/registration_status/ingress/EOF",
+    "r5/registration_status/ingress/partial_Ctrl_D",
+    "r5/registration_status/ingress/master_close",
+    "r5/registration_status/ingress/repeated",
+    "r5/registration_status/ingress/quit",
+    "r5/registration_tags/ingress/CR",
+    "r5/registration_tags/ingress/LF",
+    "r5/registration_tags/ingress/CRLF",
+    "r5/registration_tags/ingress/EOF",
+    "r5/registration_tags/ingress/partial_Ctrl_D",
+    "r5/registration_tags/ingress/master_close",
+    "r5/registration_tags/ingress/repeated",
+    "r5/registration_tags/ingress/quit",
+    "r5/registration_show/ingress/CR",
+    "r5/registration_show/ingress/LF",
+    "r5/registration_show/ingress/CRLF",
+    "r5/registration_show/ingress/EOF",
+    "r5/registration_show/ingress/partial_Ctrl_D",
+    "r5/registration_show/ingress/master_close",
+    "r5/registration_show/ingress/repeated",
+    "r5/registration_show/ingress/quit",
+    "r5/call_version/ingress/CR",
+    "r5/call_version/ingress/LF",
+    "r5/call_version/ingress/CRLF",
+    "r5/call_version/ingress/EOF",
+    "r5/call_version/ingress/partial_Ctrl_D",
+    "r5/call_version/ingress/master_close",
+    "r5/call_version/ingress/repeated",
+    "r5/call_version/ingress/quit",
+    "r5/call_version/lifecycle/Emergency",
+    "r5/call_version/lifecycle/Failed",
+    "r5/call_version/lifecycle/ClosingNormal",
+    "r5/call_version/lifecycle/ClosingRestricted",
+    "r5/call_status/ingress/CR",
+    "r5/call_status/ingress/LF",
+    "r5/call_status/ingress/CRLF",
+    "r5/call_status/ingress/EOF",
+    "r5/call_status/ingress/partial_Ctrl_D",
+    "r5/call_status/ingress/master_close",
+    "r5/call_status/ingress/repeated",
+    "r5/call_status/ingress/quit",
+    "r5/call_status/lifecycle/Emergency",
+    "r5/call_status/lifecycle/Failed",
+    "r5/call_status/lifecycle/ClosingNormal",
+    "r5/call_status/lifecycle/ClosingRestricted",
+    "r5/call_tags/ingress/CR",
+    "r5/call_tags/ingress/LF",
+    "r5/call_tags/ingress/CRLF",
+    "r5/call_tags/ingress/EOF",
+    "r5/call_tags/ingress/partial_Ctrl_D",
+    "r5/call_tags/ingress/master_close",
+    "r5/call_tags/ingress/repeated",
+    "r5/call_tags/ingress/quit",
+    "r5/call_tags/lifecycle/Emergency",
+    "r5/call_tags/lifecycle/Failed",
+    "r5/call_tags/lifecycle/ClosingNormal",
+    "r5/call_tags/lifecycle/ClosingRestricted",
+    "r6/cancel_run/ingress/CR",
+    "r6/cancel_run/ingress/LF",
+    "r6/cancel_run/ingress/CRLF",
+    "r6/cancel_run/ingress/EOF",
+    "r6/cancel_run/ingress/partial_Ctrl_D",
+    "r6/cancel_run/ingress/master_close",
+    "r6/cancel_run/ingress/repeated",
+    "r6/cancel_run/ingress/quit",
+    "r6/cancel_run/lifecycle/Emergency",
+    "r6/cancel_run/lifecycle/Failed",
+    "r6/cancel_run/lifecycle/ClosingNormal",
+    "r6/cancel_run/lifecycle/ClosingRestricted",
+    "r1/identity_view/ingress/quit",
+    "r1/identity_view/lifecycle/Failed",
+    "r1/identity_view/lifecycle/ClosingNormal",
+    "r2/inference_binding/ingress/repeated",
+    "r2/inference_binding/ingress/quit",
 ];
 /// U5b: `manifest` with the six credited entries first, for a control whose
 /// register keeps the real one's six `x:rc_` cells (each control's own
@@ -2253,7 +2372,7 @@ fn fixture_row(route: &str, sink: &str, dim: &str, value: &str, status: &str) ->
     let (seen, reached, out, won) = if open {
         (
             format!("{entry}[{id}]"),
-            format!("{first}[{id}]"),
+            format!("{first}[{}]", check_identity(&row).unwrap()),
             first,
             "route",
         )
@@ -2833,8 +2952,9 @@ fn sb3e_expect_table_is_complete() {
             by_status["hold"]
         ),
         // U21a (SB3E-R197 TR-1): six close_report rows held, unreachable by
-        // production order (rows 222-224, 232-234).
-        (754, 25, 9, 117)
+        // production order (rows 222-224, 232-234). U20a (SB3E-R214): the 35
+        // close-sink byte rows (205-211, 235-241, 269-275, 377-383, 501-507).
+        (719, 25, 9, 152)
     );
 }
 /// Tampers with the checked-in table, through the verifier on the real files.

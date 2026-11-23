@@ -241,9 +241,12 @@ impl RegistrationGate<'_> {
         crate::authority::file_session::probe(Some(&self.core.cell), "model.gate.checked");
         #[cfg(mother_route_seams)]
         route_seams::at("model.gate.checked", self.scope.route_ctx());
-        self.scope
-            .admit(&self.core.cell)
-            .map_err(|_| ModelError::Cancelled)
+        self.scope.admit(&self.core.cell).map_err(|_| {
+            // U19b-1 (SB3E-R216 F2): the gate CAS refusal's own route note.
+            #[cfg(mother_route_seams)]
+            route_seams::note("reg:cas", self.scope.route_ctx());
+            ModelError::Cancelled
+        })
     }
 }
 impl CallCancel for RegistrationGate<'_> {
@@ -315,7 +318,13 @@ impl HostSession {
             #[cfg(mother_route_seams)]
             route_seams::at("model.install.before", self.bootstrap.scope.route_ctx());
             let mut s = hold(&self.core)?;
-            gate.admission(&s).map_err(model_error)?;
+            gate.admission(&s).map_err(|e| {
+                // U19b-1 (SB3E-R216.1 F-B2): the install admission refusal, an
+                // S1 entry (not a note: R199), so other rows keep `branch=none`.
+                #[cfg(mother_route_seams)]
+                route_seams::at("reg.admission", self.bootstrap.scope.route_ctx());
+                model_error(e)
+            })?;
             s.registration = Some(RegistrationReceipt {
                 sequence,
                 digest: identity,
@@ -609,6 +618,9 @@ impl SessionDoor {
         #[cfg(mother_route_seams)]
         route_seams::at("identity", self.context.scope.route_ctx());
         if !self.context.scope.live(self.core.cell.session_word()) {
+            // U19c (SB3E-R228 F2): the live refusal's own route note.
+            #[cfg(mother_route_seams)]
+            route_seams::note("identity:scope_live", self.context.scope.route_ctx());
             return None;
         }
         // Installed M, observed without waiting (poison latches, as elsewhere).

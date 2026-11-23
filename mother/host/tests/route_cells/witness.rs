@@ -10,6 +10,7 @@ use super::s5::{Ack, Facts, Ran};
 use nexus_governed_control::broker::route_seams as s1;
 use nexus_mother::journal::Event;
 use nexus_mother::lane::LaneRole;
+use nexus_mother::state::Trigger;
 
 /// The frozen expectation table: the one reviewed `include_str!` row.
 const TABLE: &str = include_str!("../session/model-bridge-expect.tsv");
@@ -42,14 +43,16 @@ const KEYS: [&str; 7] = ["s", "q", "run", "inv", "att", "kind", "ord"];
 type Tag<'t> = (Option<&'t str>, Option<u64>);
 type Predicate = for<'a> fn(&View<'a>, &str, Tag) -> Option<Seen<'a>>;
 type Token = (&'static str, &'static str, Predicate);
-const TOKENS: [Token; 19] = [
+const TOKENS: [Token; 28] = [
     // model.call.observed, then on its thread exactly the note
-    // refused:8.cas, with no ord-4 model.call.admitted.
-    ("CAS:m:774", "model.call.observed", |v, _, _| {
-        cas(v).map(|(o, _)| o)
+    // refused:8.cas, with no model.call.admitted of the row's ord.
+    ("CAS:m:774", "model.call.observed", |v, _, tag| {
+        cas(v, tag).map(|(o, _)| o)
     }),
     // exactly the note refused:8.cas (refused:8.capacity is not it).
-    ("note:8", "refused:8.cas", |v, _, _| cas(v).map(|(_, n)| n)),
+    ("note:8", "refused:8.cas", |v, _, tag| {
+        cas(v, tag).map(|(_, n)| n)
+    }),
     // U9a (d_close): the acknowledged entry at the row's point (close.rs:271,
     // 232, 524, 49, 367-370), the next close.mother_end of S after it on its
     // thread (observe_mother_end, close.rs:499; Q11), and the seal's stop note
@@ -82,7 +85,48 @@ const TOKENS: [Token; 19] = [
     // exit point `string` (hands.rs `close_report`).
     ("note", "host.close_report.string", reported),
     ("string", "host.close_report.string", acked),
+    // U19b-1 (SB3E-R216 F2, R216.1 F-B2): the acknowledged install
+    // (model.rs:319) and, after it on its thread, the admission refusal's S1
+    // entry (model.rs:325, an entry, not a note: R199); the acknowledged
+    // metadata gate (model.rs:243) and, after it on its thread, the CAS
+    // refusal's note (model.rs:247).
+    ("m:304", "model.install.before", acked),
+    ("note:admission", "reg.admission", after_ack),
+    ("CAS:m:238", "model.gate.checked", acked),
+    ("note:cas", "reg:cas", after_ack),
+    // U19c (SB3E-R228): the acknowledged `identity` (model.rs:619) and, after
+    // it on its thread, the live refusal's note (model.rs:623); the
+    // acknowledged bind check (run.rs:2330) and, after it on its thread, the
+    // CAS refusal's note with no later `bind.done` of its run (S1). F4,
+    // option C: `note:cas@r:2301` is keyed by the whole branch text, so it is
+    // not U19b-1's `note:cas`.
+    ("m:571", "identity", acked),
+    ("note:scope_live", "identity:scope_live", after_ack),
+    ("CAS:r:2301", "model.bind.checked", acked),
+    ("note:cas@r:2301", "bind:cas", bind_refused),
+    // U20b (SB3E-R226): the acknowledged door.cancel_run (host_session.rs:1405;
+    // the frozen label h:1382-1390 is `SessionDoor::cancel_run`, now h:1400-1419).
+    ("h:1382-1390", "door.cancel_run", acked),
 ];
+/// U19c (SB3E-R228 S1): the CAS note after the acknowledgement on its thread
+/// (`after_ack`), and no `bind.done` of its run after it there: the refusal
+/// returned (run.rs:2332-2336, before :2345), as `cas` binds no admission.
+fn bind_refused<'a>(v: &View<'a>, point: &str, tag: Tag) -> Option<Seen<'a>> {
+    let n = after_ack(v, point, tag)?;
+    let done = |e: &&Seen| {
+        e.s1 && !e.note && e.point == "bind.done" && e.run == n.run && e.thread == n.thread
+    };
+    let after = |e: &&Seen| done(e) && e.tick > n.tick;
+    (!v.seen.iter().any(|e| after(&e))).then_some(n)
+}
+/// U19b-1: the admitted entry or note at `point` after the cell's last
+/// acknowledgement, on that acknowledgement's thread (the first such).
+fn after_ack<'a>(v: &View<'a>, point: &str, tag: Tag) -> Option<Seen<'a>> {
+    let a = v.f.acks.last().map(of)?;
+    let later = |e: &&Seen| e.point == point && e.thread == a.thread && e.tick > a.tick;
+    let at = |e: &&Seen| later(e) && admitted(v, e, tag);
+    v.seen.iter().filter(at).min_by_key(|e| e.tick).copied()
+}
 /// U21a (SB3E-R199 Q-U21-1): the admitted S7 `host.close_report` entry of
 /// S, then on its thread, in order, the `resources`, `inventory` and `model`
 /// branch records, each `Ok`, and the exit at `point` whose report holds no
@@ -158,7 +202,7 @@ fn after_acked<'a>(v: &View<'a>, point: &str, tag: Tag) -> Option<Seen<'a>> {
 /// captured the sources (s5.rs `start`'s `since`), or for `collect_close` and
 /// `registered` since the hold's acknowledgement (U9a M3, SEAM-1; SB3E-R6.3's
 /// empty delta is `+0:all[s=S]`).
-const LEDGER: [(&str, &str); 8] = [
+const LEDGER: [(&str, &str); 10] = [
     ("ModelCallCharged", "journal"),
     ("LaneReturned", "journal"),
     ("SessionClosed", "journal"),
@@ -166,6 +210,10 @@ const LEDGER: [(&str, &str); 8] = [
     ("model_registered", "native"),
     // U19a TR-1 (SB3E-R198): the Stop record of the reader's bound Stop route.
     ("emergency_stop", "native"),
+    // U19c (SB3E-R228 F5): the mission's end (a Stop, Block or Fail
+    // transition) and the run's cancellation record.
+    ("MissionEnd", "journal"),
+    ("run_cancelled", "native"),
     ("session_closed", "commit"),
     ("all", "all"),
 ];
@@ -195,6 +243,10 @@ model.install.before|s q ord=4|host_session/model.rs:314 (after the 4 metadata g
 reg.ready|s q ord=4|host_session.rs:858 (after the 4 metadata gates)
 reg:scope_admit|s q|host_session/model.rs:142; host_session.rs:89-91
 reg:word_compare|s q ord=4|host_session.rs:865 (after the 4 metadata gates); 89-91
+reg.admission|s q ord=4|host_session/model.rs:325 (after the 4 metadata gates); host_session.rs:89-91
+model.gate.before|s q kind=metadata ord|host_session/model.rs:263; broker/route_seams.rs:128-132
+model.gate.checked|s q ord|host_session/model.rs:243; host_session.rs:89-91
+reg:cas|s q ord|host_session/model.rs:247; host_session.rs:89-91
 close.obligations|s|host_session/close.rs:271
 close.delivery|s|host_session/close.rs:232
 close.mother_end|s|host_session/close.rs:205, 499
@@ -209,6 +261,13 @@ host.close_report.resources|s|host hands.rs close_report resources branch; route
 host.close_report.inventory|s|host hands.rs close_report inventory branch; route_seams.rs report
 host.close_report.model|s|host hands.rs close_report model branch; route_seams.rs report
 host.close_report.string|s|host hands.rs close_report exit; route_seams.rs report
+identity|s q|host_session/model.rs:619; host_session.rs:89-91
+identity:scope_live|s q|host_session/model.rs:623; host_session.rs:89-91
+bind.entry|s q run|host_session/model.rs:565; host_session.rs:89-91
+model.bind.checked|run|authority/run.rs:2330
+bind.done|run|authority/run.rs:2345
+bind:cas|run|authority/run.rs:2335
+door.cancel_run|s q run|host_session.rs:1405; 89-91
 ";
 /// W0b A1b, A4: `key|points|carrier|source`: the only bindings of a tagged
 /// key a point does not record, each through the observed entry `carrier`
@@ -217,6 +276,7 @@ host.close_report.string|s|host hands.rs close_report exit; route_seams.rs repor
 const CORRELATIONS: &str = "\
 inv|call.gate model.call.sampled model.call.observed model.call.admitted|charge|AM-2 A.4: the call's mother.charge.entry of the Builder (model_calls.rs:216)
 inv|attempt.slot model.attempt.reserved|prelock|the Builder's mother.lane.prelock of S and Q (mother coordinator.rs:1978-1983)
+inv|call.gate model.call.sampled model.call.observed model.call.admitted|recheck|U19b-2 (SB3E-R216 F6): a call refused before its charge, the Builder's mother.recheck of S and Q (model_calls.rs:491)
 q|attempt.slot model.attempt.reserved|gate|the run's later call.gate of S and Q (host_session/model.rs:883, 893-899)
 att|attempt.slot model.attempt.reserved|claim|credit's claim of the run (s5.rs credit, A.3)
 run|mother.charge.entry mother.settle|sites|credit's claim on the Builder's attempt sites (s5.rs credit, A.3)
@@ -224,6 +284,7 @@ att|mother.charge.entry mother.settle|sites|credit's claim on the Builder's atte
 s|native journal|fixture|the cell's own projection and journal in its window (s5.rs collect: since start; collect_close, registered: since the hold; kept, B1')
 s|commit|primary|the end record's S1 commit on the acknowledged close.primary's thread, after it (close.rs:524, 538; evidence_store.rs:1382-1383)
 q|native|bracket:model.record.before,model.install.before|the registration's own entries of S and Q either side of its record (host_session/model.rs:301-314)
+s|model.bind.checked bind.done bind:cas|bindentry|U19c (SB3E-R228): a bind.entry of S and Q earlier on the entry's thread, of its run (host_session/model.rs:565)
 ";
 /// The carriers a `CORRELATIONS` row may name, a closed list.
 fn carried(name: &str, v: &View, e: Option<&Seen>) -> bool {
@@ -231,11 +292,13 @@ fn carried(name: &str, v: &View, e: Option<&Seen>) -> bool {
     let builder = e.is_some_and(|e| e.inv.is_some() && e.inv == v.b.inv);
     match name {
         "charge" => v.inv,
-        "prelock" => prelocked(v),
+        "prelock" => builders(v, "mother.lane.prelock"),
+        "recheck" => builders(v, "mother.recheck"),
         "gate" => gated(v, run),
         "claim" => v.b.att.is_some() && run.is_some() && run == v.b.run,
         "sites" => builder && v.b.att.is_some(),
         "fixture" => true,
+        "bindentry" => e.is_some_and(|e| bind_entry(v, e)),
         "primary" => acked(v, "close.primary", (None, None)).is_some(),
         _ => name
             .strip_prefix("bracket:")
@@ -400,9 +463,16 @@ fn bound(v: &View, e: Option<&Seen>, point: &str, k: &str) -> bool {
     let carries = |r: &Vec<&str>| r[0] == k && r[1].split(' ').any(|p| p == point);
     rows.filter(carries).any(|r| carried(r[2], v, e))
 }
-/// The Builder's `mother.lane.prelock` of S and Q (its invocation).
-fn prelocked(v: &View) -> bool {
-    let at = |m: &&Seen| !m.s1 && m.point == "mother.lane.prelock" && m.inv.is_some();
+/// U19c: an admitted `bind.entry` of S and Q earlier on `e`'s thread, of its run.
+fn bind_entry(v: &View, e: &Seen) -> bool {
+    let at = |b: &&Seen| b.s1 && !b.note && b.point == "bind.entry" && admitted(v, b, (None, None));
+    let ours =
+        |b: &&Seen| b.run.is_some() && b.run == e.run && b.thread == e.thread && b.tick < e.tick;
+    v.seen.iter().filter(at).any(|b| ours(&b))
+}
+/// The Builder's S5 entry at `point` of S and Q (its invocation).
+fn builders(v: &View, point: &str) -> bool {
+    let at = |m: &&Seen| !m.s1 && m.point == point && m.inv.is_some();
     v.seen
         .iter()
         .filter(at)
@@ -427,7 +497,7 @@ fn brackets(v: &View, points: &str) -> bool {
 }
 /// Behaviour 10: the controls' witnesses, by `(sink, dim)`, as measured at U5
 /// Step 0 (R86).
-const CONTROLS: [(&str, &str, &str); 13] = [
+const CONTROLS: [(&str, &str, &str); 24] = [
     ("call_chat", "ingress", CONTROL),
     ("close_obligations", "lifecycle", CLOSE_CONTROLS[0]),
     ("delivery", "lifecycle", CLOSE_CONTROLS[1]),
@@ -441,6 +511,50 @@ const CONTROLS: [(&str, &str, &str); 13] = [
     ("registration_reserve", "ingress", RESERVE_CONTROL),
     ("registration_readiness", "ingress", READY_CONTROL),
     ("close_report", "lifecycle", REPORT_CONTROL),
+    ("registration_install", "ingress", INSTALL_CONTROL),
+    ("registration_version", "ingress", GATE_CONTROLS[0]),
+    ("registration_status", "ingress", GATE_CONTROLS[1]),
+    ("registration_tags", "ingress", GATE_CONTROLS[2]),
+    ("registration_show", "ingress", GATE_CONTROLS[3]),
+    ("call_version", "ingress", CALL_CONTROLS[0]),
+    ("call_status", "ingress", CALL_CONTROLS[1]),
+    ("call_tags", "ingress", CALL_CONTROLS[2]),
+    ("identity_view", "ingress", PRE_CONTROLS[0]),
+    ("inference_binding", "ingress", PRE_CONTROLS[1]),
+    ("cancel_run", "ingress", DOOR_CONTROL),
+];
+/// U19c (SB3E-R228): each sink held at its first arrival and released: it
+/// passes, with no refusal note (`branch=none`).
+const PRE_CONTROLS: [&str; 2] = [
+    "entry=identity[s=S q=Q];check=m:571[s=S q=Q];value=none@identity ack=held won=route;\
+out=passed@m:571;branch=none;ledger=+5:all[s=S];window=boundary;deadline_fired=none",
+    "entry=bind.entry[s=S run=RUN];check=CAS:r:2301[s=S run=RUN];\
+value=none@model.bind.checked ack=held won=route;out=passed@CAS:r:2301;branch=none;\
+ledger=+4:all[s=S];window=boundary;deadline_fired=none",
+];
+/// U20b (SB3E-R226): the cancel_run control, held at `door.cancel_run` and
+/// released with no value: the sink passes (`Ok`).
+const DOOR_CONTROL: &str = "entry=door.cancel_run[s=S run=RUN];check=h:1382-1390[s=S run=RUN];\
+value=none@door.cancel_run ack=held won=route;out=passed@h:1382-1390;branch=none;\
+ledger=+0:all[s=S];window=boundary;deadline_fired=none";
+/// U19b-2 (SB3E-R217): the call controls, each held at its own ord of
+/// `model.call.observed` and released: the call completes (`charge_append=1`).
+const CALL_CONTROLS: [&str; 3] = [
+    "entry=call.gate[s=S q=Q run=RUN inv=INV att=ATT kind=metadata ord=1];\
+check=model.call.observed[s=S q=Q run=RUN inv=INV att=ATT ord=1];\
+value=none@model.call.observed ack=held won=route;out=admitted@model.call.admitted;branch=none;\
+ledger=+1:ModelCallCharged[inv=INV],+1:model_call[run=RUN att=ATT];window=completed_attempt;\
+peer=/api/version,/api/status,/api/tags,/api/chat chat=1;next=charge_append=1,lane_returned=1;deadline_fired=none",
+    "entry=call.gate[s=S q=Q run=RUN inv=INV att=ATT kind=metadata ord=2];\
+check=model.call.observed[s=S q=Q run=RUN inv=INV att=ATT ord=2];\
+value=none@model.call.observed ack=held won=route;out=admitted@model.call.admitted;branch=none;\
+ledger=+1:ModelCallCharged[inv=INV],+1:model_call[run=RUN att=ATT];window=completed_attempt;\
+peer=/api/version,/api/status,/api/tags,/api/chat chat=1;next=charge_append=1,lane_returned=1;deadline_fired=none",
+    "entry=call.gate[s=S q=Q run=RUN inv=INV att=ATT kind=metadata ord=3];\
+check=model.call.observed[s=S q=Q run=RUN inv=INV att=ATT ord=3];\
+value=none@model.call.observed ack=held won=route;out=admitted@model.call.admitted;branch=none;\
+ledger=+1:ModelCallCharged[inv=INV],+1:model_call[run=RUN att=ATT];window=completed_attempt;\
+peer=/api/version,/api/status,/api/tags,/api/chat chat=1;next=charge_append=1,lane_returned=1;deadline_fired=none",
 ];
 /// U21a: the close_report control, `quit` held at the entry with no value:
 /// the credited rows' text with `none`.
@@ -464,6 +578,31 @@ ledger=+1:all[s=S];window=boundary;deadline_fired=none";
 const READY_CONTROL: &str = "entry=reg.ready[s=S];check=h:838[s=S];\
 value=none@reg.ready ack=held won=route;out=passed@h:838;branch=none;\
 ledger=+0:all[s=S];window=boundary;deadline_fired=none";
+/// U19b-1 (SB3E-R216 F2): the install control, measured: admitted, so
+/// `branch=none` (no `reg:admission` note on the admitted path).
+const INSTALL_CONTROL: &str = "entry=model.install.before[s=S q=Q];check=m:304[s=S q=Q];\
+value=none@model.install.before ack=held won=route;out=passed@m:304;branch=none;\
+ledger=+0:all[s=S];window=boundary;deadline_fired=none";
+/// U19b-1 (SB3E-R216, R216.1 F-B1): the four metadata-gate controls, each
+/// held at its own ord and admitted (`branch=none`: no `reg:cas` note).
+const GATE_CONTROLS: [&str; 4] = [
+    "entry=model.gate.before[s=S q=Q kind=metadata ord=1];check=CAS:m:238[s=S q=Q ord=1];\
+value=none@model.gate.checked ack=held won=route;out=passed@CAS:m:238;branch=none;\
+ledger=+1:model_registered[s=S q=Q];window=boundary;\
+peer=/api/version,/api/status,/api/tags,/api/show chat=0;deadline_fired=none",
+    "entry=model.gate.before[s=S q=Q kind=metadata ord=2];check=CAS:m:238[s=S q=Q ord=2];\
+value=none@model.gate.checked ack=held won=route;out=passed@CAS:m:238;branch=none;\
+ledger=+1:model_registered[s=S q=Q];window=boundary;\
+peer=/api/version,/api/status,/api/tags,/api/show chat=0;deadline_fired=none",
+    "entry=model.gate.before[s=S q=Q kind=metadata ord=3];check=CAS:m:238[s=S q=Q ord=3];\
+value=none@model.gate.checked ack=held won=route;out=passed@CAS:m:238;branch=none;\
+ledger=+1:model_registered[s=S q=Q];window=boundary;\
+peer=/api/version,/api/status,/api/tags,/api/show chat=0;deadline_fired=none",
+    "entry=model.gate.before[s=S q=Q kind=metadata ord=4];check=CAS:m:238[s=S q=Q ord=4];\
+value=none@model.gate.checked ack=held won=route;out=passed@CAS:m:238;branch=none;\
+ledger=+1:model_registered[s=S q=Q];window=boundary;\
+peer=/api/version,/api/status,/api/tags,/api/show chat=0;deadline_fired=none",
+];
 /// U6a-1 (SB3E-R120.6 Q7): the registration_record control as measured at
 /// U6a-1 Step 0, 10/10: the record rows' text with no value.
 const REG_CONTROL: &str = "entry=model.record.before[s=S q=Q];check=m:292-299[s=S q=Q];\
@@ -620,12 +759,12 @@ fn notes<'a>(v: &View<'a>, tag: (Option<&str>, Option<u64>)) -> Vec<Seen<'a>> {
 }
 /// `TOKENS[0]` and `[1]`: the observed entry, then on its thread, later,
 /// exactly one note of this identity and ordinal, `refused:8.cas`, of the
-/// chat (kind `chat`, R88.1); no `model.call.admitted` of it.
-fn cas<'a>(v: &View<'a>) -> Option<(Seen<'a>, Seen<'a>)> {
-    let chat = (Some("chat"), Some(4));
-    let o = first_at(v, "model.call.observed", chat)?;
-    let admitted = first_at(v, "model.call.admitted", chat);
-    let [note] = notes(v, chat)[..] else {
+/// row's request (R88.1: the tag's kind and ord; U5's chat, U19b-2's ords
+/// 1-3); no `model.call.admitted` of it.
+fn cas<'a>(v: &View<'a>, tag: Tag) -> Option<(Seen<'a>, Seen<'a>)> {
+    let o = first_at(v, "model.call.observed", tag)?;
+    let admitted = first_at(v, "model.call.admitted", tag);
+    let [note] = notes(v, tag)[..] else {
         return None;
     };
     let ok = note.point == "refused:8.cas"
@@ -733,9 +872,12 @@ fn rendered(f: &Facts, shape: &Shape, t: &Tables) -> String {
     // The branch note: its token's predicate held, or what was noted.
     let branch_text = text("branch");
     let note_token = branch_text.split('@').next().unwrap_or("");
+    // U19c F4 (option C): a token keyed by the whole branch text comes first.
+    let whole = v.t.tokens.iter().any(|t| t.0 == branch_text);
+    let keyed = if whole { branch_text } else { note_token };
     let note = note_token
         .starts_with("note:")
-        .then(|| token(v, note_token, tag))
+        .then(|| token(v, keyed, tag))
         .flatten();
     let observed = |shown: String| match (entry.is_some(), stray.is_empty()) {
         (false, _) => Err(Unbound),
@@ -793,7 +935,11 @@ fn rendered(f: &Facts, shape: &Shape, t: &Tables) -> String {
         .read
         .as_ref()
         .map(|r| match last.is_some_and(|l| l <= r.since) {
-            true => super::reader::read_ack(r.value, &r.trace, &f.broker, &r.echo, r.since),
+            // U19b-1 (SB3E-R214 F-S0-B, R216 F7): the row's value admits one
+            // reader value; a bare terminator never renders `read`.
+            true => super::reader::tied(f.value, r.value).and_then(|()| {
+                super::reader::read_ack(r.value, &r.trace, &f.broker, &r.echo, r.since)
+            }),
             false => Err("read: before the hold".into()),
         });
     let ack = match (answered, read, f.applied.zip(first)) {
@@ -898,6 +1044,9 @@ fn ledger(v: &View, text: &str) -> Obs {
             Event::ModelCallCharged { invocation, .. } => ("ModelCallCharged", Some(invocation)),
             Event::LaneReturned { invocation, .. } => ("LaneReturned", Some(invocation)),
             Event::SessionClosed => ("SessionClosed", None),
+            Event::Transition {
+                trigger: Trigger::Stop { .. } | Trigger::Block { .. } | Trigger::Fail { .. },
+            } => ("MissionEnd", None),
             _ => ("", None),
         };
         let by_inv = |e: &&nexus_mother::journal::Entry| {
@@ -908,7 +1057,7 @@ fn ledger(v: &View, text: &str) -> Obs {
             r.phase.as_str() == event && (event != "model_call" || attempt(v, r))
         };
         let Some(source) = LEDGER.iter().find(|l| l.0 == event).map(|l| l.1) else {
-            return Ok(format!("unlisted:{event}"));
+            return Ok((format!("unlisted:{event}"), 0, false));
         };
         let carried: &[&str] = match event {
             "ModelCallCharged" | "LaneReturned" => &["inv"],
@@ -961,15 +1110,24 @@ fn ledger(v: &View, text: &str) -> Obs {
             "commit" => commits(true),
             _ => v.f.journal.len() + v.f.native.len() + host_commits(v),
         };
-        // U19a TR-1 (SB3E-R202 S1): the Stop record stands for the whole window, as `+0:all` did.
-        let whole = v.f.journal.len() + v.f.native.len();
-        if event == "emergency_stop" && n != whole {
-            return Ok(format!("+{n}:{event}[{tag}] of {whole}"));
-        }
-        Ok(format!("+{n}:{event}[{tag}]"))
+        let windowed = WINDOWED.contains(&event);
+        Ok((format!("+{n}:{event}[{tag}]"), n, windowed))
     });
-    Ok(shown.collect::<Result<Vec<_>, _>>()?.join(","))
+    let shown = shown.collect::<Result<Vec<_>, _>>()?;
+    // U19a TR-1 (SB3E-R202 S1), U19c (R228 F5): the Stop, end and cancel
+    // records stand for the whole window, as `+0:all` did: their counts must
+    // sum to the window (journal and native), else ` of <whole>` is shown.
+    let whole = v.f.journal.len() + v.f.native.len();
+    let sum: usize = shown.iter().map(|s| s.1).sum();
+    let windowed = shown.iter().any(|s| s.2) && sum != whole;
+    let mut items: Vec<String> = shown.into_iter().map(|s| s.0).collect();
+    if let (true, Some(last)) = (windowed, items.last_mut()) {
+        last.push_str(&format!(" of {whole}"));
+    }
+    Ok(items.join(","))
 }
+/// The ledger events counted against the whole window (U19a, U19c).
+const WINDOWED: [&str; 3] = ["emergency_stop", "MissionEnd", "run_cancelled"];
 /// U21a: a `close_report` cell's primary records in its window, with no
 /// projection in a `hands::run` child: its S1 commits after its S7
 /// acknowledgement (0 for every other cell).
@@ -1005,7 +1163,13 @@ fn window(v: &View) -> Obs {
 fn next(v: &View, text: &str) -> Obs {
     let lane = |e: &&nexus_mother::journal::Entry| matches!(e.event, Event::LaneReturned { .. });
     let returned = |e: &&nexus_mother::journal::Entry| matches!(e.event, Event::LaneReturned { invocation, .. } if Some(invocation) == v.b.inv);
-    if v.b.inv.is_none() && v.f.journal.iter().any(|e| lane(&e)) {
+    // U19b-2 (SB3E-R216 F6): `charge_append` counts the next sink's entries
+    // (`mother.charge.entry`, model_calls.rs:216) of the Builder, S and Q.
+    let charge = |m: &&Seen| !m.s1 && m.point == "mother.charge.entry";
+    let charges = || v.seen.iter().filter(charge);
+    let ours = |m: &&Seen| m.inv == v.b.inv && m.s == Some(v.b.s) && m.q == Some(v.b.q);
+    let unbound = v.f.journal.iter().any(|e| lane(&e)) || charges().next().is_some();
+    if v.b.inv.is_none() && unbound {
         return Err(Unbound);
     }
     let keys = text.split(',').map(|kv| kv.split('=').next().unwrap_or(""));
@@ -1014,6 +1178,7 @@ fn next(v: &View, text: &str) -> Obs {
             "lane_returned={}",
             v.f.journal.iter().filter(returned).count()
         ),
+        "charge_append" => format!("charge_append={}", charges().filter(ours).count()),
         other => format!("{other}=unbuilt"),
     });
     Ok(shown.collect::<Vec<_>>().join(","))
@@ -1285,8 +1450,9 @@ fn coverage() {
     for t in &tags {
         println!("WITNESS B1 tag set [{}] group={}", t.0, t.1);
     }
-    // U21a (SB3E-R197 TR-1): six close_report rows are held (no witness).
-    assert_eq!(rows, 788, "every row with a witness");
+    // U21a (SB3E-R197 TR-1): six close_report rows are held (no witness);
+    // U20a (SB3E-R214.1): and the 35 close-sink byte rows (TR-1 holds).
+    assert_eq!(rows, 753, "every row with a witness");
     // W0b B2', U6a-1: `collect_reg`'s sinks are exactly the no-Mother drivers' rows.
     let rows = TABLE.lines().map(|l| l.split('\t').collect::<Vec<_>>());
     let no_mother = |c: &Vec<&str>| ["d_register", "d_bootstrap"].contains(&c[6]);
@@ -2140,6 +2306,28 @@ fn tr1_stray(f: &super::Fixture) -> Facts {
     let refused: [Result<(), &str>; 1] = [Err("Restricted")];
     let row = ("registration_reserve", "ingress");
     let mut facts = super::s5::read_registered(f, row, ("CR", "stop0d"), &refused);
+    let mut stray = facts.native.first().cloned().expect("the Stop record");
+    stray.phase = nexus_governed_control::authority::evidence::EvidencePhase::ModelRegistered;
+    facts.native.push(stray);
+    facts
+}
+/// U20b (SB3E-R226 F-C; R202 S1 at d_cancel, row 171): a stray non-Stop record
+/// fails `ledger`.
+#[test]
+fn witness_control_tr1_stray_record_fails_the_cancel_run_ledger() {
+    let name = "witness::witness_control_tr1_stray_record_fails_the_cancel_run_ledger";
+    let row = ("cancel_run", "ingress", "CR");
+    differs_at(
+        name,
+        "ctl_tr1_stray_cancel_run",
+        tr1_stray_cancel_run,
+        row,
+        &["ledger"],
+    );
+}
+fn tr1_stray_cancel_run(f: &super::Fixture) -> Facts {
+    let row = ("cancel_run", "ingress");
+    let mut facts = super::s5::d_cancel(f, row, "CR", Some("stop0d"));
     let mut stray = facts.native.first().cloned().expect("the Stop record");
     stray.phase = nexus_governed_control::authority::evidence::EvidencePhase::ModelRegistered;
     facts.native.push(stray);
