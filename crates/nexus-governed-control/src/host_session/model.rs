@@ -395,6 +395,13 @@ impl Attempt {
         let (mut owner, previous, model_digest) = {
             let _producers = core.producers.try_lock().map_err(|_| busy(()))?;
             let mut s = hold(core).map_err(|_| busy(()))?;
+            // SEAM-2 (SB3E-R242 N1): the word refusal's own route note, under
+            // the slot hold, just before the check whose first disjunct it is.
+            #[cfg(mother_route_seams)]
+            if core.cell.session_word() & (SEALED | FAILED) != 0 {
+                #[cfg(mother_route_seams)]
+                route_seams::note("attempt:slot_word", Ctx::session(core.identity).run(run));
+            }
             if core.cell.session_word() & (SEALED | FAILED) != 0
                 || s.active
                 || core.model.uncertain.load(Ordering::SeqCst)

@@ -644,7 +644,7 @@ fn route_s5_recorded_path_is_measured_and_credited() {
         let mut points: Vec<&str> = witness.sites.iter().map(|s| s.0).collect();
         points.sort_unstable();
         points.dedup();
-        assert_eq!(points.len(), 10, "every S5 site: {points:?}");
+        assert_eq!(points.len(), 11, "every S5 site: {points:?}");
         for (site, invocation, claim, compared) in &witness.sites {
             let attempt = ATTEMPT.contains(site);
             let expected = match *site {
@@ -3874,5 +3874,207 @@ fn route_s5_door_ack_binds_the_worker() {
         assert!(harness.is_err(), "door_ack accepted the harness's thread");
         let elsewhere = door_ack(Some(ack), (s, q, other, ack.thread));
         assert!(elsewhere.is_err(), "door_ack accepted another run");
+    });
+}
+
+// ===== SEAM-2, U19d (SB3E-R242; Step 0 report §3, §13): the d_call rows of
+// the R3 attempt and R4 meter sinks, harness composition until M-5b (F1:
+// every shipped lane has model cap 0), each held on the Builder's one call.
+/// Each sink's held point (model.rs:394, run.rs:2144, model_calls.rs:216,
+/// :310) and the session's `call.gate` entries when its value is applied
+/// (measured; a control passes all 4).
+static ATT_POINTS: [(&str, &str, usize); 4] = [
+    ("call_slot_reserve", "attempt.slot", 0),
+    ("attempt_ticket", "model.attempt.checked", 0),
+    ("charge_append", "mother.charge.entry", 3),
+    ("meter_settle", "mother.settle", 4),
+];
+/// The refusal records of N1, N2 (S1 notes) and P1 (an S5 point).
+const ATT_REFUSALS: [&str; 3] = ["attempt:slot_word", "attempt:cas", "mother.charge.stale"];
+/// SEAM-2: the row's value applied (or `typed` through the reader) while its
+/// sink is held, collected by `collect_att`. C1 (R194): the advance's last
+/// step is `want`; the control `none` must write no refusal record.
+pub(super) fn attempted(
+    f: &Fixture,
+    row: (&'static str, &'static str),
+    (value, typed): (&'static str, Option<&'static str>),
+    want: &str,
+) -> Facts {
+    let at = ATT_POINTS.iter().find(|p| p.0 == row.0);
+    let at = at.unwrap_or_else(|| panic!("attempted: {} has no point", row.0));
+    let (anchor, points) = match at.1.starts_with("mother.") {
+        true => (Anchor::Mother(at.1), &[][..]),
+        false => (Anchor::Arrival(1), std::slice::from_ref(&at.1)),
+    };
+    let (chain, c) = (
+        Chain {
+            row,
+            anchor,
+            points,
+        },
+        start(f),
+    );
+    let (acks, steps, (worker, findings)) = chained(f, &c.mother, &chain, |held, worker| {
+        reopen(); // The window opens at the hold's acknowledgement.
+        let findings = match typed {
+            Some(_) => pre_apply(&c.o, held, (value, typed)),
+            None => {
+                let found = door_apply(&c.o, value); // Its state read while held.
+                drop(held);
+                found
+            }
+        };
+        if value != "none" {
+            *APPLIED.lock().unwrap() = Some(Instant::now());
+        }
+        (worker, findings)
+    });
+    let mut facts = collect_att(&c.o, (chain.anchor_point(), acks), (row, value), findings);
+    let mut found: Vec<String> = att_ack(&facts, worker).err().into_iter().collect();
+    // C1 (R194): the advance's last step.
+    let ended = steps.last().map_or("none", String::as_str);
+    if ended != want {
+        found.push(format!("attempted: the advance ended {ended}, not {want}"));
+    }
+    // The inverse controls: no refusal record on the admitted path.
+    let noted = facts.broker.iter().map(|e| e.point);
+    let mut noted = noted.chain(facts.mother.iter().map(|e| e.point));
+    if value == "none" && noted.any(|p| ATT_REFUSALS.contains(&p)) {
+        found.push("attempted: a refusal record on the admitted path".into());
+    }
+    let pressed =
+        |e: &&s1::Entry| e.point == "ingress.emergency" && e.session == Some(facts.session);
+    let presses = facts.broker.iter().filter(pressed).count();
+    if value == "repeated" && presses != 2 {
+        found.push(format!("attempted: {presses} ingress.emergency entries"));
+    }
+    found.into_iter().for_each(|x| later(&mut facts, x));
+    facts
+}
+/// The hold is acknowledged at the row's point on the advancing worker, never
+/// the reader's or the harness's thread: of S and RUN at `attempt.slot`, of
+/// RUN and ATT at `model.attempt.checked` (which records no session), of S,
+/// Q and the Builder's invocation at the S5 points.
+fn att_ack(f: &Facts, worker: ThreadId) -> Result<(), String> {
+    let (run, att) = (f.claim.map(|c| c.0), f.claim.map(|c| c.1));
+    let builder = f.recorded.iter().find(|r| r.0 == LaneRole::Builder);
+    let builder = builder.map(|r| r.1);
+    let ours = match &f.acks[..] {
+        [Ack::S1(a)] if a.note || a.thread != worker || a.run != run || run.is_none() => false,
+        [Ack::S1(a)] if a.point == "attempt.slot" => a.session == Some(f.session),
+        [Ack::S1(a)] => a.point == "model.attempt.checked" && a.attempt == att,
+        [Ack::S5(a)] => {
+            let keyed = (a.session, a.request) == (Some(f.session), Some(f.request));
+            keyed && a.thread == worker && builder.is_some() && a.invocation == builder
+        }
+        _ => false,
+    };
+    let none = || format!("attempted: no acknowledgement of the advancing worker {worker:?}");
+    ours.then_some(()).ok_or_else(none)
+}
+/// SEAM-2: the passive collection of a held attempt or meter cell, after the
+/// settle barrier (F5): both traces; one counted call, the sink's measured
+/// gates and no entry of another session or request; T6 at `attempt.slot`,
+/// which every row enters; RUN from the session's own native `run_opened`
+/// and ATT from that run's one opening (T1: a slot value binds no ATT); journal,
+/// projection and peer since the hold's acknowledgement (`reopen`).
+fn collect_att(
+    o: &Opened,
+    (points, acks): (Vec<&'static str>, Vec<Ack>),
+    (cell, value): ((&'static str, &'static str), &'static str),
+    mut findings: Vec<String>,
+) -> Facts {
+    if READ.lock().unwrap().is_some() {
+        findings.extend(settled(o).err());
+    }
+    let (broker, mother) = (s1::drain_trace(), s5::drain_trace());
+    let s = SOURCES.lock().unwrap().take();
+    let s = s.expect("collect_att: no observation");
+    let (session, request, calls, recorded) = &s.driver;
+    let recorded = recorded.lock().unwrap().clone();
+    let gate = |b: &&s1::Entry| b.point == "call.gate" && !b.note && b.session == Some(*session);
+    let gates = broker.iter().filter(gate).count();
+    let want = ATT_POINTS.iter().find(|p| p.0 == cell.0).map(|p| p.2);
+    let want = if value == "none" { Some(4) } else { want };
+    let foreign = |m: &s5::Entry| (m.session, m.request) != (Some(*session), Some(*request));
+    let profile = match () {
+        () if calls.load(Ordering::SeqCst) != 1 => Some("driver_calls"),
+        () if Some(gates) != want => Some("gates"),
+        () if mother.iter().any(foreign) => Some("request"),
+        () if s.cell != *RUNNING.lock().unwrap() => Some("cell"),
+        () => None,
+    };
+    findings.extend(profile.map(|reason| format!("credit: {reason}")));
+    let seams = t6_close(cfg!(mother_route_seams), *session, "attempt.slot", &broker);
+    findings.extend(seams.err().map(|r| format!("T6 attempt: {r}")));
+    let records = s.native.records();
+    let opened = records.iter().filter(|r| r.phase.as_str() == "run_opened");
+    let opened: Vec<&str> = opened.filter_map(|r| r.run.as_deref()).collect();
+    let run = match opened[..] {
+        [only] => RunId::parse(only),
+        _ => None,
+    };
+    let granted = |b: &&s1::Entry| b.point == ATTEMPT_OPENING && !b.note && b.run == run;
+    let openings = broker.iter().filter(granted).filter_map(|b| b.attempt);
+    let claim = match (cell.0, &openings.collect::<Vec<u32>>()[..]) {
+        ("call_slot_reserve", _) if value != "none" => run.map(|r| (r, u32::MAX)),
+        (_, [att]) => run.map(|r| (r, *att)),
+        _ => None,
+    };
+    let journal = journal_at(&s.journal).map(|mut all| all.split_off(s.since.0.min(all.len())));
+    let journal = journal.unwrap_or_else(|e| {
+        findings.push(e);
+        Vec::new()
+    });
+    let peer = s.peer.lock().unwrap()[s.since.2..].to_vec();
+    let native = records.get(s.since.1..).unwrap_or_default().to_vec();
+    let facts = Facts {
+        session: *session,
+        request: *request,
+        recorded,
+        claim,
+        points,
+        acks,
+        value,
+        row: cell,
+        applied: APPLIED.lock().unwrap().take(),
+        broker,
+        mother,
+        host: Vec::new(),
+        journal,
+        native,
+        peer,
+        findings,
+        read: READ.lock().unwrap().take(),
+    };
+    KEPT.lock().unwrap().push(("collect_att", facts.clone()));
+    facts
+}
+/// Rule level, over a real typed charge run: `att_ack` admits the advancing
+/// worker's acknowledgement and refuses the reader's or the harness's thread, or none.
+#[test]
+fn route_s5_att_ack_binds_the_advancing_worker() {
+    child("s5::route_s5_att_ack_binds_the_advancing_worker", |f| {
+        let (row, typed) = (("charge_append", "ingress"), ("CR", Some("stop0d")));
+        let mut facts = attempted(f, row, typed, "Err(Stopped)");
+        assert!(facts.findings.is_empty(), "{:?}", facts.findings);
+        let Some(Ack::S5(ack)) = facts.acks.first().cloned() else {
+            panic!("no acknowledgement")
+        };
+        let read = facts.read.as_ref().map(|r| &r.trace[..]);
+        let mut reader = read.unwrap_or_default().iter();
+        let reader = reader.rfind(|e| e.point == "host.read").expect("a read");
+        let harness = std::thread::current().id();
+        assert_eq!(att_ack(&facts, ack.thread), Ok(()));
+        assert!(
+            att_ack(&facts, reader.thread).is_err(),
+            "the reader's not refused"
+        );
+        assert!(
+            att_ack(&facts, harness).is_err(),
+            "the harness's not refused"
+        );
+        facts.acks.clear();
+        assert!(att_ack(&facts, ack.thread).is_err(), "none not refused");
     });
 }

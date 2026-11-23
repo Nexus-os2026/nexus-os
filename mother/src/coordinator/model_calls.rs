@@ -221,6 +221,9 @@ impl<P: EffectPort> CallMeter for BorrowedMeter<'_, P> {
                     .as_ref()
                     .is_some_and(|cell| cell.is_engaged())
             {
+                // SEAM-2 (SB3E-R242 P1): the stale refusal's own S5 point.
+                #[cfg(mother_route_seams)]
+                route_seams::at("mother.charge.stale", self.route_ctx());
                 return Ok(());
             }
             let m = inner.mission(self.invocation.mission)?;
@@ -321,6 +324,9 @@ impl<P: EffectPort> CallMeter for BorrowedMeter<'_, P> {
                         l.invocation == self.invocation && l.generation == self.generation
                     }) {
                         l.in_flight = false;
+                        // SEAM-2 (SB3E-R242 P2): the cleared flight's own S5 point.
+                        #[cfg(mother_route_seams)]
+                        route_seams::at("mother.settle.cleared", self.route_ctx());
                     }
                 }
                 Ok(())

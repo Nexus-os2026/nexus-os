@@ -23,11 +23,13 @@ const M: &str = "nexus-mother-route-seam-S5";
 /// The bounded wait of every pause (design 3.5).
 const PATIENCE: Duration = Duration::from_secs(10);
 /// Every point a harness may arm: the `mother.*` rows of design 4.4.
-pub(crate) const POINTS: [&str; 10] = [
+pub(crate) const POINTS: [&str; 12] = [
     "mother.charge.entry",
+    "mother.charge.stale",
     "mother.charge",
     "mother.charge.ok",
     "mother.settle",
+    "mother.settle.cleared",
     "mother.classify",
     "mother.recheck",
     "mother.lane.prelock",
