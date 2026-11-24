@@ -2145,7 +2145,12 @@ impl RunRegistry {
             "model.attempt.checked",
             Ctx::default().run(run).attempt(ordinal),
         );
-        cell.admit()?; // Original retained Q's real same-word CAS; never refresh.
+        // Original retained Q's real same-word CAS; never refresh.
+        cell.admit().inspect_err(|_| {
+            // SEAM-2 (SB3E-R242 N2): the CAS refusal's own route note.
+            #[cfg(mother_route_seams)]
+            route_seams::note("attempt:cas", Ctx::default().run(run).attempt(ordinal));
+        })?;
         entry.model_attempts = ordinal;
         entry.model_pins.insert(ordinal);
         Ok(ticket)

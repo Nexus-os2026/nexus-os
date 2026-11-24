@@ -1467,7 +1467,10 @@ pe.route_ctx());¦e.cell),);¦letmuts=ho +gate.admission(&s).map_err(|e|{>letres
 ;¦e.cell),);¦#[cfg(test >pub(super)fnacquire(core:&Arc<Core>,authority:&Authority,(run,agent,gr\
 oup,identity):(RunId,&AgentId,GroupId,[u8;32]),original:&HaltCell,grant:&OriginalGrant<'_>,invo\
 cation:&InvocationObserver,)->Result<Self,AuthorityError>{>implAttempt{ at(attempt.slot,Ctx::se\
-ssion(core.identity).run(run));¦ailable();¦let(mutown at(model.attempt.reserved,Ctx::session(co\
+ssion(core.identity).run(run));¦ailable();¦let(mutown \
++#[cfg(mother_route_seams)]ifcore.cell.session_word()&(SEALED|FAILED)!=0{>let(mutowner,previous,model_digest)={ \
+note(attempt:slot_word,Ctx::session(core.identity).run(run));¦AILED)!=0{¦}ifcore.ce = \
+at(model.attempt.reserved,Ctx::session(co\
 re.identity).run(run),);¦e.cell),);¦letticket= >pub(super)fnrecord_return(&mutself,authority:&A\
 uthority,result:Result<(),ModelError>,)->Result<EndStatus,SessionError>{>implAttempt{ at(model.\
 attempt.record.before,self.route_ctx());¦.cell),,);¦letrecord= >pub(super)fncomplete(mutself)->\
@@ -1544,7 +1547,9 @@ authority/run.rs: >pub(crate)fnadmit_session_attempt(self:&Arc<Self>,(run,agent,
 :(RunId,&AgentId,GroupId,[u8;32]),original:&HaltCell,grant:&OriginalGrant<'_>,invocation:&crate\
 ::inference::InvocationObserver,)->Result<SessionAttempt,AuthorityError>{>implRunRegistry{ at(m\
 odel.attempt.granted,Ctx::default().run(run).attempt(ordinal),);¦(&cell),);¦letticket= at(model\
-.attempt.checked,Ctx::default().run(run).attempt(ordinal),);¦(&cell),);¦cell.admit >pub(crate)f\
+.attempt.checked,Ctx::default().run(run).attempt(ordinal),);¦(&cell),);¦cell.admit +cell.admit().inspect_err(|_|{ \
+note(attempt:cas,Ctx::default().run(run).attempt(ordinal));¦t_err(|_|{¦})?;entry. \
+>pub(crate)f\
 nsettle_session_attempt(&self,ticket:SessionAttempt,deadline:Instant,)->Result<(),AuthorityErro\
 r>{>implRunRegistry{ at(model.settle.before,Ctx::default().run(ticket.run).attempt(ticket.ordin\
 al),);¦t.cell),);¦letmuttabl >pub(crate)fnadmit_session_inference(&self,b:SessionBinding<'_>,)-\

@@ -8,8 +8,10 @@
 // U21a's five R9 close_report cells (SB3E-R197, R199), U19b-1's twelve
 // R0 registration_install and 32 R5 metadata-gate cells (SB3E-R216) and
 // U19b-2's 36 R5 call cells refused at ords 1-3 (SB3E-R217), U20b's twelve
-// R6 cancel_run cells (SB3E-R226) and U19c's three R1 identity_view and two
-// R2 inference_binding cells (SB3E-R228). The route_cells lane compiles it through
+// R6 cancel_run cells (SB3E-R226), U19c's three R1 identity_view and two
+// R2 inference_binding cells (SB3E-R228), U20c's 17 R7 and 14 R8 cells
+// (SB3E-R243) and SEAM-2's 30 R3 attempt and R4 meter cells (SB3E-R242).
+// The route_cells lane compiles it through
 // `macro_rules! cells` in main.rs, whose terminal arm is the control
 // `ctl_call_chat`; session_model_bridge.rs and check-citations.py parse it
 // as text. One entry per credited cell: `<route> <sink> <dim> <value>;`
@@ -189,4 +191,65 @@ cells! {
     r1 identity_view lifecycle ClosingNormal;
     r2 inference_binding ingress repeated;
     r2 inference_binding ingress quit;
+    r7 attempt_record ingress repeated;
+    r7 attempt_record ingress quit;
+    r7 attempt_record lifecycle Emergency;
+    r7 attempt_record lifecycle Failed;
+    r7 attempt_record lifecycle ClosingNormal;
+    r7 attempt_record lifecycle ClosingRestricted;
+    r7 attempt_pin_release ingress repeated;
+    r7 attempt_pin_release ingress quit;
+    r7 attempt_pin_release lifecycle Emergency;
+    r7 attempt_pin_release lifecycle Failed;
+    r7 attempt_pin_release lifecycle ClosingNormal;
+    r7 attempt_pin_release lifecycle ClosingRestricted;
+    r7 operation_complete ingress repeated;
+    r7 operation_complete ingress quit;
+    r7 operation_complete lifecycle Emergency;
+    r7 operation_complete lifecycle Failed;
+    r7 operation_complete lifecycle ClosingRestricted;
+    r8 lane_result_admission ingress CR;
+    r8 lane_result_admission ingress LF;
+    r8 lane_result_admission ingress CRLF;
+    r8 lane_result_admission ingress EOF;
+    r8 lane_result_admission ingress partial_Ctrl_D;
+    r8 lane_result_admission ingress master_close;
+    r8 lane_result_admission ingress repeated;
+    r8 lane_result_admission ingress quit;
+    r8 lane_result_admission lifecycle Emergency;
+    r8 lane_result_admission lifecycle Failed;
+    r8 lane_result_admission lifecycle ClosingNormal;
+    r8 lane_result_admission lifecycle ClosingRestricted;
+    r8 post_record_recheck ingress repeated;
+    r8 record_first_classify ingress repeated;
+    r3 attempt_ticket ingress repeated;
+    r3 attempt_ticket ingress quit;
+    r3 attempt_ticket lifecycle Emergency;
+    r3 attempt_ticket lifecycle Failed;
+    r3 attempt_ticket lifecycle ClosingNormal;
+    r3 attempt_ticket lifecycle ClosingRestricted;
+    r3 call_slot_reserve ingress repeated;
+    r3 call_slot_reserve ingress quit;
+    r3 call_slot_reserve lifecycle Emergency;
+    r3 call_slot_reserve lifecycle Failed;
+    r3 call_slot_reserve lifecycle ClosingNormal;
+    r3 call_slot_reserve lifecycle ClosingRestricted;
+    r4 charge_append ingress CR;
+    r4 charge_append ingress LF;
+    r4 charge_append ingress CRLF;
+    r4 charge_append ingress EOF;
+    r4 charge_append ingress partial_Ctrl_D;
+    r4 charge_append ingress master_close;
+    r4 charge_append ingress repeated;
+    r4 charge_append ingress quit;
+    r4 charge_append lifecycle Emergency;
+    r4 charge_append lifecycle Failed;
+    r4 charge_append lifecycle ClosingNormal;
+    r4 charge_append lifecycle ClosingRestricted;
+    r4 meter_settle ingress repeated;
+    r4 meter_settle ingress quit;
+    r4 meter_settle lifecycle Emergency;
+    r4 meter_settle lifecycle Failed;
+    r4 meter_settle lifecycle ClosingNormal;
+    r4 meter_settle lifecycle ClosingRestricted;
 }

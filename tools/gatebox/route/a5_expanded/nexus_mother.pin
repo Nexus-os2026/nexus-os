@@ -92,7 +92,7 @@
                 route_seams::Ctx::of(context.as_ref()).invocation(self.invocation)
             }
         }
-=== lane	pub mod coordinator > mod model_calls > impl < P : EffectPort > CallMeter for BorrowedMeter < '_ , P >	fn charge ( & self ) -> Result < Charged , MeterRefusal >	count 1	bytes 4858
+=== lane	pub mod coordinator > mod model_calls > impl < P : EffectPort > CallMeter for BorrowedMeter < '_ , P >	fn charge ( & self ) -> Result < Charged , MeterRefusal >	count 1	bytes 4956
             fn charge(&self) -> Result<Charged, MeterRefusal> {
                 let c = self.coordinator;
                 if c.port.emergency_stopped() {
@@ -105,6 +105,7 @@
                                     if inner.usable().is_err() ||
                                             inner.file_cell.as_ref().is_some_and(|cell|
                                                     cell.is_engaged()) {
+                                        route_seams::at("mother.charge.stale", self.route_ctx());
                                         return Ok(());
                                     }
                                     let m = inner.mission(self.invocation.mission)?;
@@ -164,7 +165,7 @@
                             })?;
                 result
             }
-=== lane	pub mod coordinator > mod model_calls > impl < P : EffectPort > CallMeter for BorrowedMeter < '_ , P >	fn settle ( & self , call : u32 )	count 1	bytes 1363
+=== lane	pub mod coordinator > mod model_calls > impl < P : EffectPort > CallMeter for BorrowedMeter < '_ , P >	fn settle ( & self , call : u32 )	count 1	bytes 1463
             fn settle(&self, call: u32) {
                 let c = self.coordinator;
                 route_seams::at("mother.settle", self.route_ctx());
@@ -184,6 +185,7 @@
                                                             l.generation == self.generation
                                                     }) {
                                         l.in_flight = false;
+                                        route_seams::at("mother.settle.cleared", self.route_ctx());
                                     }
                                 }
                                 Ok(())
@@ -534,7 +536,7 @@
             }
             Ok(Ended::Through)
         }
-=== lane		pub mod route_seams	count 1	bytes 11855
+=== lane		pub mod route_seams	count 1	bytes 11903
 /// SB-3E S5 (design 4.2): seam builds only; the route lane's cfg.
 pub mod route_seams {
     //! SB-3E S5 (design 4.2, 4.4; AM-2 B.1): Mother's route seams, as S1.
@@ -560,11 +562,11 @@ pub mod route_seams {
     /// The bounded wait of every pause (design 3.5).
     const PATIENCE: Duration = Duration::from_secs(10);
     /// Every point a harness may arm: the `mother.*` rows of design 4.4.
-    pub(crate) const POINTS: [&str; 10] =
-        ["mother.charge.entry", "mother.charge", "mother.charge.ok",
-                "mother.settle", "mother.classify", "mother.recheck",
-                "mother.lane.prelock", "mother.admit", "mother.admit.ok",
-                "mother.lane.returned"];
+    pub(crate) const POINTS: [&str; 12] =
+        ["mother.charge.entry", "mother.charge.stale", "mother.charge",
+                "mother.charge.ok", "mother.settle", "mother.settle.cleared",
+                "mother.classify", "mother.recheck", "mother.lane.prelock",
+                "mother.admit", "mother.admit.ok", "mother.lane.returned"];
     static ARMED: AtomicBool = AtomicBool::new(false);
     static STATE: Mutex<State> =
         Mutex::new(State {
