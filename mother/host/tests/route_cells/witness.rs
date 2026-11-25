@@ -1439,7 +1439,8 @@ fn witness_read_failure_credit_needs_the_shim_witness() {
         }
     };
     let found = refusals(&ran("read_failure", None), row.0, row.1, "read_failure");
-    assert_eq!(found, ["record: no shim witness"]);
+    let want = ["record: no shim witness"];
+    assert_eq!(found, want, "credited without the shim witness");
     credited(
         &ran("read_failure", Some("d")),
         row.0,

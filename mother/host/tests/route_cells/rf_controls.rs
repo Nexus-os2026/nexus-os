@@ -58,7 +58,7 @@ fn route_rf_wrong_digest() {
     let Some((ran, found)) = refused("rf_controls::route_rf_wrong_digest", record, carrier) else {
         return;
     };
-    assert_eq!(found, NO_CHILD);
+    assert_eq!(found, NO_CHILD, "rf: a child that ended before its record");
     assert!(
         ran.output.contains("assertion `left == right` failed"),
         "{}",
@@ -83,7 +83,7 @@ fn route_rf_changed_file() {
     let Some((ran, found)) = refused("rf_controls::route_rf_changed_file", record, carrier) else {
         return;
     };
-    assert_eq!(found, NO_CHILD);
+    assert_eq!(found, NO_CHILD, "rf: a child that ended before its record");
     assert!(
         ran.output.contains("assertion `left == right` failed"),
         "{}",
@@ -102,7 +102,7 @@ fn route_rf_not_mapped() {
     let Some((ran, found)) = refused("rf_controls::route_rf_not_mapped", record, carrier) else {
         return;
     };
-    assert_eq!(found, NO_CHILD);
+    assert_eq!(found, NO_CHILD, "rf: a child that ended before its record");
     assert!(
         ran.output.contains("the shim is not mapped"),
         "{}",
