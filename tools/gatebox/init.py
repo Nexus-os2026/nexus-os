@@ -29,7 +29,7 @@ def child_options(log_fd):
     return {'stdin':subprocess.DEVNULL,'stdout':log_fd,'stderr':subprocess.STDOUT,
             'close_fds':True,'env':dict(ENV),'cwd':'/work/src','start_new_session':True}
 
-ROUTE_CWD = {'route_a1':'/work/src','a7':'/work/src','route-cells':'/work/src/mother/host'}  # receipt.GATE_SETS literal (P11)
+ROUTE_CWD = {'route_a1':'/work/src','a7':'/work/src','route_shim':'/work/src','route-cells':'/work/src/mother/host'}  # receipt.GATE_SETS literal (P11)
 def requested():
     """The supervisor-validated request (snapshot.parse_request); it alone selects the gate set."""
     return json.loads(Path('/gate/request.json').read_bytes())
@@ -241,6 +241,29 @@ class Runner:
             while block := os.read(fd,1024*1024): digest.update(block)
         finally: os.close(fd)
         if digest.hexdigest() != expected: raise ValueError('HARNESS: bytes differ from A7 lane inventory')
+    def witness(self, policy, stage, sealed=None):
+        """GB4b (SB3E-R19 B1, R32.1): the policy-named witness directory holds exactly the policy's files, each a
+        bounded regular file read without following a link; after the first reading, the same bytes."""
+        try: fd = open_beneath(policy['dir'],DIRECTORY)
+        except OSError as exc: raise ValueError('WITNESS: '+stage+': missing/linked '+policy['dir']) from exc
+        try: names = set(os.listdir(fd))
+        finally: os.close(fd)
+        if names != set(policy['files']): raise ValueError('WITNESS: '+stage+': unexpected witness set in '+policy['dir'])
+        try: found = {name:read_regular(policy['dir']+'/'+name,policy['max_bytes']) for name in policy['files']}
+        except ValueError as exc: raise ValueError('WITNESS: '+stage+': '+str(exc)) from exc
+        if sealed is not None and found != sealed: raise ValueError('WITNESS: '+stage+': bytes differ from the sealed witness')
+        return found
+    def shims(self, gate, policy, env):
+        """Init makes the directory itself (an existing one is refused), builds the shim from the snapshot with the
+        policy's argv, and seals the built bytes into the private stream before any harness process exists."""
+        try: os.mkdir(policy['dir'],0o700)
+        except OSError as exc: raise ValueError('WITNESS: the witness directory was not made by init: '+policy['dir']) from exc
+        _, code, _ = self.command('route_shim',gate['argv'],env,ROUTE_CWD['route_shim'])
+        self.quiet('after-route-shim')
+        if code: raise ValueError('WITNESS: the shim build exited nonzero')
+        sealed = self.witness(policy,'built')
+        for name, data in sealed.items(): self.sealed('witness-'+name,data)
+        return sealed
     def pins(self, pins, digest):
         """SB3E-R48.1 B1: the snapshot's pins file, no link followed, regular, bounded, equal to the request.
         One terminated record either way; a refusal ends the run before any Cargo process."""
@@ -253,8 +276,8 @@ class Runner:
     def route(self, policy, request):
         """SB3E-R18 P1 sequence, R19.3 as replaced by R20, GB3 pins and route A1 first. Any failure raises;
         nothing is retried."""
-        if [g['id'] for g in policy['gates']] != ['route_a1','a7','route-cells']: raise ValueError('ROUTE_POLICY: gates')
-        (a1, a7, harness), env, self.quiescence = policy['gates'], policy['environment'], {}
+        if [g['id'] for g in policy['gates']] != ['route_a1','a7','route_shim','route-cells']: raise ValueError('ROUTE_POLICY: gates')
+        (a1, a7, shim, harness), env, self.quiescence = policy['gates'], policy['environment'], {}
         self.quiet('before-route-a1')
         self.pins(policy['pins'],request['route_pins_sha256'])
         _, code, output = self.command('route_a1',a1['argv'],env,ROUTE_CWD['route_a1'])
@@ -273,6 +296,7 @@ class Runner:
         artifact = dict(id=harness['target'],adapter='libtest',executable=path,package=harness['package'],target=harness['target'])
         self.output('coverage',json.dumps(dict(artifacts=[artifact],failures=[])).encode())
         self.verify_harness(path,expected)
+        witness = self.shims(shim,policy['witness'],env)  # GB4b: before the first harness process
         _, code, listing = self.command('route-cells-list',[path,'--list','--format','terse'],env,ROUTE_CWD['route-cells'])
         lines = listing.split('\n')
         if lines[-1] == '': lines.pop()
@@ -284,7 +308,9 @@ class Runner:
         self.output('route-lane',json.dumps(dict(harness_sha256=expected,names=names,rustc_vv=meta['rustc'],cargo_v=meta['cargo'])).encode())
         self.quiet('after-list')
         self.verify_harness(path,expected)  # with only init alive, nothing runs between this and the exec
+        self.witness(policy['witness'],'after-list',witness)
         name, code, output = self.command('route-cells',[path],env,ROUTE_CWD['route-cells'])
+        self.witness(policy['witness'],'after-run',witness)
         inventory = reconcile(names,output)
         if code or inventory['ignored']: raise ValueError('route-cells: failed or ignored test')
         self.output(name+'-inventory',json.dumps(dict(artifact=artifact,inventory=inventory)).encode())
@@ -379,6 +405,17 @@ def probe_module():
 
 def probe_payload(private_fds): return probe_module().payload(private_fds)
 
+def probe_run(runner, private_fds, run=None):
+    """GB4b (SB3E-R108.2): a failed probe sends its own failure, which names its stage (probe.staged), as one
+    bounded, terminated record, as route_run does; the original failure still ends the run."""
+    try: return (run or probe_payload)(private_fds)
+    except BaseException as exc:
+        try:
+            runner.output('probe-failure',(type(exc).__name__+': '+str(exc))[:2000].encode())
+            packet(runner.log,{'id':'probe-failure','data':''})
+        except (ValueError,OSError): pass  # the original failure is the one that ends the run
+        raise
+
 def resources():
     result = {}
     for name in ('/work','/run/gate','/tmp','/dev/shm'):
@@ -452,7 +489,7 @@ def main():
         peak = probe_module().Peak(resources)
         peak.start()
         try:
-            isolation, versions = probe_payload((log,status))
+            isolation, versions = probe_run(runner,(log,status))
             runner.output('isolation',json.dumps(isolation).encode())
             runner.output('versions',json.dumps(versions).encode())
             runner.gates()

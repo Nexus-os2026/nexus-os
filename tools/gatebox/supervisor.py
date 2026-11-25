@@ -200,6 +200,8 @@ def route_summary(summary, evidence, logs, identity):
                            rustc_vv=lane['rustc_vv'],cargo_v=lane['cargo_v'],lockfile_sha256=summary['snapshot']['lockfile_sha256'],
                            wrapper_sha256=route['a7']['wrapper_sha256'],harness_sha256=lane['harness_sha256'],
                            inventory_sha256=digest('\n'.join(lane['names']).encode()),names=lane['names'],trust=route['trust'])
+    if 'witness' in route:  # GB4b: the digest of each witness file's published bytes, never a value init or the harness names
+        summary['lane']['shims'] = {n:digest(logs['witness-'+n+'.log']) for n in route['witness']['files']}
 
 STATE = Path('/var/lib/mothergate')
 CONTROL = Path('/run/mothergate-control')
@@ -384,6 +386,8 @@ def execute(run, request, peer, registration, identity, marker, stage_name):
             try: route_failure(summary,evidence,logs,identity)
             except Exception as exc:  # publication still happens; the lane stays empty and says why
                 summary['missing_evidence'].append('route A1 lane: '+type(exc).__name__+': '+str(exc))
+        if 'probe-failure' in evidence.terminated:  # GB4b (SB3E-R108.2): init's own bounded record, complete only
+            summary['missing_evidence'].append('init: '+logs['probe-failure.log'][:2000].decode('utf-8','replace'))
         if not summary['commands']: summary['commands'] = evidence.commands
         try: summary['cleanup'] = stop_and_confirm(run)
         except Exception as exc:

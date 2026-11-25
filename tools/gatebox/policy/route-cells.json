@@ -1,8 +1,8 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "gate_set_id": "route-cells",
   "success_status": "PASS_ROUTE_CELLS",
-  "environment": {"HOME": "/work/home", "LANG": "C.UTF-8", "PATH": "/usr/bin:/bin", "TMPDIR": "/run/gate/tmp"},
+  "environment": {"HOME": "/work/home", "LANG": "C.UTF-8", "PATH": "/usr/bin:/bin", "ROUTE_WITNESS_DIR": "/run/gate/witness", "TMPDIR": "/run/gate/tmp"},
   "toolchain": {"path": "/opt/rust", "manifest_sha256": "09da50b02502ec93fa0d15cc59a713eb41a49b4106b40651429cc4d322f5648e"},
   "a7": {
     "target": "/work/target-route",
@@ -15,6 +15,7 @@
                  "lane/start", "lane/unit_graph.json", "lane/wrapper.log"]
   },
   "pins": {"path": "/work/src/tools/route_pins.json", "max_bytes": 65536},
+  "witness": {"dir": "/run/gate/witness", "files": ["route_read.so"], "max_bytes": 1048576},
   "gates": [
     {"id": "route_a1", "argv": ["/usr/bin/python3", "-I", "-B", "/gate/bin/route/route_a1.py", "--repo", "/work/src",
                                 "--toolchain", "/opt/rust", "--pins", "/work/src/tools/route_pins.json"]},
@@ -23,10 +24,12 @@
                           "--wrapper-sha256", "8e728370d42af88e3df6eab76aca632c6fb66bef9d403158752b0945754bd775",
                           "--toolchain", "/opt/rust", "--json", "/run/gate/a7-verdict.json", "--keep-lane-target",
                           "--pins", "/work/src/tools/route_pins.json"]},
+    {"id": "route_shim", "argv": ["/usr/bin/cc", "-shared", "-fPIC", "-Wall", "-Wextra", "-Werror", "-o", "/run/gate/witness/route_read.so",
+                                  "/work/src/mother/host/tests/route_cells/route_read.c", "-ldl"]},
     {"id": "route-cells", "adapter": "libtest", "package": "nexus-mother-host", "target": "route_cells",
      "executable": "/work/target-route/release/deps/route_cells-[0-9a-f]{16}"}
   ],
   "inventory": "sha256 of the harness's libtest --list --format terse names (': test' removed), in listed order, joined by LF, no trailing LF",
-  "trust": "No unpinned candidate code runs before A7's evidence is sealed; the only candidate-reachable code during A7 is pinned build-time code (third party pinned by a Cargo.lock equal to the lock digest in the submitted pins file (`tools/route_pins.json`, whose sha256 the request commits to) and the AM-1 item 3 list), which falls under assumption 6. Pinned build-time code (third party pinned by a Cargo.lock equal to the lock digest in the submitted pins file (`tools/route_pins.json`, whose sha256 the request commits to) and the AM-1 item 3 list) and its descendants are assumed not to alter A7's evidence, verdict path or the harness; quiescence and sealing protect only against later writers and cannot authenticate earlier writes. The inventory hash is a commitment, not execution attestation: trust includes the submitter (gatesubmit), review-record custody and reviewed harness behaviour, including that the running harness does not replace its own pathname, which would change the bytes its children execute (SB3E-R20). The pins file is chosen by the submitter: the box refuses drift from it, not from the reviewed base. Only credit compares its digest with the independently reviewed one.",
+  "trust": "No unpinned candidate code runs before A7's evidence is sealed; the only candidate-reachable code during A7 is pinned build-time code (third party pinned by a Cargo.lock equal to the lock digest in the submitted pins file (`tools/route_pins.json`, whose sha256 the request commits to) and the AM-1 item 3 list), which falls under assumption 6. Pinned build-time code (third party pinned by a Cargo.lock equal to the lock digest in the submitted pins file (`tools/route_pins.json`, whose sha256 the request commits to) and the AM-1 item 3 list) and its descendants are assumed not to alter A7's evidence, verdict path or the harness; quiescence and sealing protect only against later writers and cannot authenticate earlier writes. The inventory hash is a commitment, not execution attestation: trust includes the submitter (gatesubmit), review-record custody and reviewed harness behaviour, including that the running harness does not replace its own pathname, which would change the bytes its children execute (SB3E-R20). The pins file is chosen by the submitter: the box refuses drift from it, not from the reviewed base. Only credit compares its digest with the independently reviewed one. The shim witness (`lane.shims`, SB3E-R19 B1) is the library init built from the snapshot with the policy's command, sealed before the first harness process and read again after the listing and after the run: a change and restore of it within the run is not seen, because the harness runs as init's own user (F6), and that a cell's child preloads that library remains reviewed harness behaviour. The witness digest depends on the host C compiler and libraries (F7); only credit compares it with the review record's independent rebuild on the same host.",
   "limitations": ["The /opt/rust manifest pin fixes toolchain content at checking time only; the toolchain stays a mutable trusted host input."]
 }
