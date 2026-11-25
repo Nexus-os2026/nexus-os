@@ -1,6 +1,7 @@
 //! SB-3E S5 section U20b: s5_door.rs
 // SB3E-R226: the twelve credited R6 cancel_run rows (x:171-176, 179, 184, 562-565)
 // and their control, each one call of s5's `d_cancel` with its row's literals.
+// CELL-RF-10 (SB3E-R267): x:177, read_failure, in a child that carries the read shim.
 use super::{
     s5::{d_cancel, Facts},
     Fixture,
@@ -25,6 +26,10 @@ pub(super) fn cancel_partial_ctrl_d(f: &Fixture) -> Facts {
 }
 pub(super) fn cancel_master_close(f: &Fixture) -> Facts {
     d_cancel(f, INGRESS, "master_close", Some("master_close"))
+}
+/// CELL-RF-10 (x:177): the armed read shim fails the reader's read.
+pub(super) fn cancel_read_failure(f: &Fixture) -> Facts {
+    d_cancel(f, INGRESS, "read_failure", Some("read_failure"))
 }
 pub(super) fn cancel_repeated(f: &Fixture) -> Facts {
     d_cancel(f, INGRESS, "repeated", None)
