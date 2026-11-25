@@ -10,6 +10,9 @@ One run on one clean commit, steps in order, each logged under DIR/logs:
                 working files' tree (a private index, R60.8) is HEAD's, the
                 wrapper is the pinned one;
   a3_check_data A3's data check, before any scan and before A4 (R36.3);
+  linecite      every plant expect that cites `path:line[:col]` holds its content
+                anchor with the plant's own mutation applied
+                (tools/route_linecite.py, SB3E-R248, R255.8 P4; no build);
   std_tests     real builds and every existing guard: the route packages' tests
                 (desktop: lib, bins and the listed tests; `live` needs a desktop);
   fmt           `cargo fmt --all -- --check`;
@@ -251,6 +254,8 @@ def main():
         return finish(args, gate, head, tree, [])
     t, r = args.toolchain, args.repo
     gate.tool("a3_check_data", "route_a3.py", "check-data", "--repo", r, "--toolchain", t)
+    # GB4b-B (SB3E-R248): a stale line-cited expect fails here, before any build, not hours later in `plants`.
+    gate.tool("linecite", os.path.join("..", "..", "route_linecite.py"), "--repo", r)
     gate.cargo("std_tests", "target-std", "test", "--locked", "--offline", "--no-fail-fast", "-p", "nexus-governed-control",
                "-p", "nexus-mother", "-p", "nexus-mother-host")
     desktop = [x for test in data["desktop_tests"] for x in ("--test", test)]
