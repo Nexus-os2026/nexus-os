@@ -1846,10 +1846,11 @@ call's first arrival (`s5.rs` `called`, as `ord3_quit`).
 M-5b": U5's x:93-96, 98, 99; U19a's x:86-91, 534-537; these 36; U19c's 5 identity and bind
 rows x:298, 307, 312, 607, 608 (14.23); SEAM-2's 30 attempt and meter rows x:77, 82, 111, 116,
 188-193, 196, 201, 339, 344, 529-532, 539-542, 569-572, 630-633 (14.24); and U20c's 31 rows x:43,
-48, 60, 65, 316-321, 324, 327, 357, 362, 371, 399, 519-522, 524-527, 625-628, 636-638 (14.25).
+48, 60, 65, 316-321, 324, 327, 357, 362, 371, 399, 519-522, 524-527, 625-628, 636-638 (14.25); and
+CELL-RF-10's ten read_failure rows x:177, 322, 411, 423, 435, 447, 459, 471, 483, 495 (14.27).
 M-5b owes: a production-order guard (the page call and the identity and bind sinks run on a
 worker or exchange thread, never the reader; the reader stays live until after the work join,
-hands.rs:1390-1391; Stop is bound before the run, hands.rs:1157); a re-run of each of those 118
+hands.rs:1390-1391; Stop is bound before the run, hands.rs:1157); a re-run of each of those 128
 rows, by key, on M-5b's own composition; U19c's 15 open rows (x:286-291, 294, 606, 609, S2;
 x:299-304, F5), SEAM-2's 22 (the 18 byte rows x:69-74, 103-108, 331-336, races A and B;
 read_failure x:75, 109, 194, 337) and U20c's 24 (x:35-40, 52-57, 349-354, 366-368, 394-396;
@@ -2145,3 +2146,84 @@ exist; owed, not this unit.
 mutation, tests and expect: the seven main.rs terminal-arm rows (now with U20c's six `ctl!`
 entries), the three count-after-the-call rows and r42_drive_call_span_stretched_reset (on
 `drive_call`'s new body), and r55_cells_row_malformed (ROUTE_CELLS' last rows, rehashed).
+
+### 14.27 SB-3E CELL-RF-10: the ten reachable read_failure rows (SB3E-R255.2, R267)
+
+**Credited (10, set B): local evidence; receipt pending (R258.1, R267.4).** Harness composition
+until M-5b (F1; 14.21's list). Each cell is one call of its sink's existing driver with the reader
+value `read_failure`, in the same held cell as the sink's credited byte rows, with production's
+reader bound to the session (`s5.rs` `Reading`); no production file changes and `route_read.c`
+is unchanged.
+
+| Row | Sink | Driver (section) | Held at | C1 |
+|---|---|---|---|---|
+| x:177 | cancel_run | `d_cancel` (s5_door.rs) | `door.cancel_run` (host_session.rs:1405) | the sink `Ok` |
+| x:322 | lane_result_admission | `d_lane` (s5_r8.rs) | the Builder's `mother.lane.prelock` (coordinator.rs:1979-1983) | `Err(Stopped)`, none, `Ok(())` |
+| x:411, 435 | registration_install, registration_record | `read_registered` (s5_reg.rs) | `model.install.before` (model.rs:319), `model.record.before` (model.rs:306) | `model_stopped` or `model_cancelled` (F7) |
+| x:423, 447 | registration_readiness, registration_reserve | the same | `reg.ready` (host_session.rs:858), `reg.reserve` (model.rs:122) | `Restricted` |
+| x:459, 471, 483, 495 | registration_show, _status, _tags, _version | the same | `model.gate.checked` (model.rs:243), ords 4, 2, 3, 1 | `model_cancelled` |
+
+**Carrier contract (R32.1 B1, R257).** `s5::cell` gives the child of a `_read_failure` cell
+`reader::read_env`'s three variables (`cell_with`, `Carrier`): `LD_PRELOAD`, `ROUTE_READ_ARM`
+(a file in the child's own root) and `ROUTE_SHIM_SHA256`, the sha256 the **parent** takes of
+the library's bytes before the child starts. With `ROUTE_WITNESS_DIR` set the library is
+`$ROUTE_WITNESS_DIR/route_read.so`, only read: the harness never builds, writes or renames
+there, and a missing file fails the cell in the parent. Unset, the shim is built in the child's
+root as before. The child, before it drives, runs `store::shim_witness` (`reader::shim_child`):
+the preload is a mapped path of `/proc/self/maps` and its sha256 is the parent's. The parent
+keeps the digest in `Ran.shim` only if the child printed exactly one witness line naming it
+(`reader::shim_parent`). The arm file is made only by `write_value("read_failure")`, inside
+`Reading::typed`, after the hold's acknowledgement.
+
+**F3 (soundness, R267.1).** `witness::credited` (through `witness::refusals`) refuses a
+`read_failure` row whose `Ran.shim` is `None`: `record: no shim witness`. A child that
+preloads the shim but skips its check still renders the frozen row; only this rule refuses it
+(plant `rf10_p_child_witness_skipped`: all ten cells fail with exactly that line). Rule test
+`witness_read_failure_credit_needs_the_shim_witness`.
+
+**F4 (soundness, R267.1).** No witness token carries the session state. `Reading::typed` reads
+it after the reader's own acknowledgements, while the cell's hold stands, and `Reading::close`
+adds `read: state <s> after read_failure, not Failed`. With `shared.fail(Failure::Input)`
+removed from the read-error arm every one of the ten witnesses is unchanged and only this
+finding fails the cells (plant `rf10_p_fail_dropped`, state `Emergency`). The check is inside
+`Reading` only; `reg_drive`, `d_cancel` and `late` are unchanged (F5).
+
+**TR-1 (data commit; column 14 only; for the independent review).**
+
+| Row | Field | Frozen | Now | Read from |
+|---|---|---|---|---|
+| x:177, 411, 423, 447 | ledger | `+0:all[s=S]` | `+1:emergency_stop[s=S]` | The reader's read-error arm presses the Stop route before it fails the session (terminal.rs `read_input`, :1433-1440; press :1435, `stop.rs` `press` :88-91). Production binds that route to the session (hands.rs:1157), and its worker records the stop (`stop.rs`:137 → host_session/stop.rs `record_stop` :162 → `EvidencePhase::EmergencyStop`, authority/mod.rs:1077; `emergency_stop`, authority/evidence.rs:72). One native record, as F-S0-1 on the byte rows of the same sinks (14.17, 14.20, 14.22). The R202 S1 whole-window clause applies: the count renders only when it is all of journal + native. |
+| x:322 | window | `boundary` | `completed_attempt` | witness.rs `window` (:1227-1238) reads the whole trace; the Builder's attempt has completed before its own prelock is held. The rule is unchanged; as x:316-321 (14.25, finding A). |
+
+Measured on the frozen table first: the four ledgers rendered `+1:all[s=S]` and x:322 rendered
+`window=completed_attempt`; nothing else differed. x:435, 459, 471, 483, 495 equal their frozen
+rows.
+
+**Stability.** Each of the ten cells passed, byte-equal to its row, in 10/10 sequential and 10/10
+parallel runs of the final build, and again 10/10 with `ROUTE_WITNESS_DIR` naming a 0500
+directory that was unchanged after.
+
+**Controls (rf_controls.rs; not a section).** On the x:435 cell: a wrong digest, a library
+changed after the digest, a preload that is not mapped (its digest its own), no shim, the read
+failure applied as the reader opens (`ROUTE_READ_EARLY`, the wrong read), a typed EOF, and a
+witnessed shim that returns EOF: each is refused, by its named line. The inverse, per driver
+family: the witnessed shim, never armed, leaves `ctl_registration_record`, `ctl_cancel_run` and
+`ctl_lane_result_admission` byte-equal to their rows. Rule test
+`route_read_env_takes_the_witness_and_never_builds`.
+
+**Installed proof (R267.4): not proven locally.** The ten rows count only when GB4b-A is merged,
+installed and qualified, and a host-authenticated `PASS_ROUTE_CELLS` receipt on the merged SHA
+shows: `lane.shims = {"route_read.so": D}` with the published `witness-route_read.so.log`; D
+equal to the review record's own rebuild (`--route-shim-sha256`); the ten
+`cells::rc_*_ingress_read_failure` names in the inventory and passed; no `NO-SHIM-WITNESS` refusal; init's three
+witness checks passed; and every `ROUTE SHIM SHA256` line of the ten cells equal to D. U22 is
+checked against these rows only after that.
+
+**Ledger (not this unit).** F6: on x:322, 435, 459, 471, 483, 495 the frozen ledger names another
+event, so the Stop record in the window is not counted by it; the press is bound by `ack=read`.
+F7: x:435's native order and the sink error of x:411 and x:435 (`model_stopped` or
+`model_cancelled`) vary under one witness (F-S0-3). F8: `reg_drive` and `d_cancel` settle
+through `Reading::close` (`Terminal::finish`), `late` also through `settled`. F9: the shim's
+digest moves with the compiler, so `route_read.c` does not change here. The other 15
+read_failure keys stay owed (R255.2); this section replaces "GB4b" for these ten keys in the
+ledgers of 14.20, 14.22 and 14.25.

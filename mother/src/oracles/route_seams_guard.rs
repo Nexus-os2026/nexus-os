@@ -148,8 +148,8 @@ const PORT_USES: &str = "\
 /// `#[path]` site of Mother's sources (G-S1).
 const PIN_DATA: &str = include_str!("route_seams_guard.pins");
 /// SB3E-R42.3 (G-S2): the pins file's sha256 and the sweep's exact count.
-const PINS_SHA256: &str = "489ce1699317a678c8ae25a45d8ad69198c465543d3fbf006df5200efe0c0093";
-const MUTANTS: usize = 3339;
+const PINS_SHA256: &str = "a2a616ac3e277db2c7fecdad74be4c62e2c3bb2a1953aa3cede2c7a8fc83c66b";
+const MUTANTS: usize = 3429;
 const REGIONS: usize = 38;
 /// SB3E-R51.1: every file of the harness directory, byte for byte, exactly
 /// this list (`name sha256`): the authority for all of `route_cells`, `s5.rs`
@@ -158,24 +158,25 @@ const REGIONS: usize = 38;
 /// advisory layer.
 const CELLS: &str = "host/tests/route_cells/";
 const ROUTE_CELLS: &str = "\
-cells.rs 84847cce7ddc24e674bad5682bcb23914baa44725b773bc9d755e933911a0d8a
+cells.rs 3c3105da61048ef4f91cd47c27ec36c7ab1bacf3e803bb8e67ded4f100998d8e
 grant.rs fbe4c4b9dc43dc86c77ed4ec9c09f8bf9ea61dc8091b8ed1866a847a99e27be4
 locks.rs 9b82f75d8ad4f2d0c47194c69be15187dd3f96291033b3a57a4105bc731ccf78
-main.rs 14fb806db7fad8481725bafd3bb9c871ba83f57cefaede4884472971129ff7b9
-reader.rs f0e072b6911653d806059786c6b9c822a908d0b6dbdad832c03ffbec4c7fe66b
+main.rs e4c07319163515f869da0e649843137f982a0ecf829eb765363e0ff2eba35067
+reader.rs 85762729304983f719c14f25b1f0366953861bdd9275a70c618fbbf1d9755c3f
+rf_controls.rs 777013f4767902daabd00a5d0ae1e8830649b493a740eed70799579cc9ef0b15
 route_read.c 05fa04a9a933dacf5c4d4a93776e695da0c885dfebba857751f16cb7f14c6b4b
 route_fsync.c 6166fe8b9eee2e9c2a84a8bcbfcc1590f14de97d7bb0d60084da674a56f0e973
-s5.rs 19c8e6f1abf84e97ec1bee2b47453750aaeb35001ab63b5d47a4f7494ff542d7
+s5.rs 34acafe28fb8623ad78b40909db4aa9d2b8ba567ebc39de9944bffcb34e1f140
 s5_close.rs 6127e5b54a2032998559214f4ef6efb8f7d9d765d6c55097367a386423434a0a
-s5_door.rs 323413cba0602e50146257de8146f162322a8678e97e80e932a06656864a8f5c
-s5_reg.rs 14561ee08b9feb518d8d61901f075c2f80b2dd7af465a09c6537ef055f4009a0
+s5_door.rs aa309f62fcd47330501a7878bc0fcad754af8df6fcd6a2adff95f6a791a15bf9
+s5_reg.rs 99a6eee2276221107b96fb794b290bdeb1183c21a9d054fd5ecd214206e28df2
 s5_call_b.rs 2d7e695e5e214bf07d644db6c525b7216003e31e73d26ba6871fed0894f4e271
 s5_ident.rs d467c2f963694c2a603b0cce39c413bf8709c230b5ad426b3fb4f9ab27d2f966
 s5_r6.rs 42217130763f956fa59dbc92830b833a9321ca1cbfd55b269fe3d82211f2efea
 s5_r7.rs ad041df26c8c0f54e46ebbddb42d333f623fc483ad7a51ad092ef292de50f70d
-s5_r8.rs 6b326d0a76740bcc526391fec977a6a49b7f93cf7c85967e45412346417b216d
+s5_r8.rs 5297c5b2bbf0f4f7515ed013293fdb1be6e12cb7c62617ab889e1ab1bdd02221
 s5_r34.rs 4c1a25096ca10a0752b82ccce3205a8a878910c26fd15e885817e6628c46fcd7
-witness.rs 2ada1e372644a117517132b12f95d7e7b682245c98606c08e944638286ab536b
+witness.rs 3789d2309a43e2c8ea8c045f6a8576cb1a7ccfff5e5e50a61bd0103ae2e6fbb4
 store.rs 0dabb6132cfc184a99b4627b983226cdef3390785c8e60daa189bba5bc737b00
 report.rs 29250bdce566726d69473bd8afffa8a04c79e04f8589ed9d41dbf94f845f744f
 s5_report.rs fed9e772fe9f00880077ca56f4a229742208bcdd904314cf5126fc91ba7166c9
@@ -204,13 +205,14 @@ s5_r8.rs|U20c|lane_result_admission:ingress,lane_result_admission:lifecycle,post
 s5_report.rs|U21a|close_report:lifecycle,close_report:fault,close_report:schedule|ctl_close_report|super::report::reached,super::report::Hold,super::report::Owner,super::s5::collect_report,super::s5::Facts,super::Fixture|-
 ";
 /// Item 1(a): the directory's files that are not sections, closed.
-const NON_SECTIONS: [&str; 10] = [
+const NON_SECTIONS: [&str; 11] = [
     "cells.rs",
     "grant.rs",
     "locks.rs",
     "main.rs",
     "reader.rs",
     "report.rs",
+    "rf_controls.rs",
     "route_fsync.c",
     "route_read.c",
     "store.rs",
@@ -297,6 +299,7 @@ modgrant;\n\
 modlocks;\n\
 modreader;\n\
 modreport;\n\
+modrf_controls;\n\
 mods5;\n\
 mods5_call_b;\n\
 mods5_close;\n\
@@ -3138,8 +3141,10 @@ s|enum Hold
 h|const BROKER_SINKS
 h|const CLOSE_SINKS
 h|const HELD_SINKS
-h|struct Ran{id,nonce,result,passed,output}
+h|struct Ran{id,nonce,result,passed,output,shim}
 h|fn cell
+h|type Carrier
+h|fn cell_with
 s|fn mission
 s|fn hold
 s|enum Anchor
