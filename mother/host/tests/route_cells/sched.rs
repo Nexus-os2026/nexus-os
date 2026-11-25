@@ -207,12 +207,21 @@ fn route_sched_names_only_a_forced_stop_first() {
             "run-{}",
             "0".repeat(32)
         ));
+        assert!(other.is_some(), "another run");
+        // R272 C1: the trace's own copy is edited with the acknowledgement, so
+        // `contains` still holds and only the named clause flips.
+        let door = |x: &mut Facts, s: &mut Sched, edit: &dyn Fn(&mut s1::Entry)| {
+            let d = s.door.as_mut().expect("the door's acknowledgement");
+            let at = x.broker.iter().position(|e| e == d);
+            edit(d);
+            x.broker[at.expect("in the trace")] = d.clone();
+        };
         let cases: [(&str, &dyn Fn(&mut Facts, &mut Sched)); 8] = [
             ("no acknowledgement", &|_, s| s.door = None),
-            ("the harness's thread", &|_, s| {
-                s.door.as_mut().unwrap().thread = here
+            ("the harness's thread", &|x, s| {
+                door(x, s, &|d| d.thread = here)
             }),
-            ("another run", &|_, s| s.door.as_mut().unwrap().run = other),
+            ("another run", &|x, s| door(x, s, &|d| d.run = other)),
             ("not settled", &|_, s| s.settled = Err("settle".into())),
             ("released before the Stop's commit", &|_, s| {
                 s.released = since
