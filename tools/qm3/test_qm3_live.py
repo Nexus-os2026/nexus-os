@@ -3,12 +3,17 @@
 Run: python3 -I -B -m unittest discover -s tools/qm3 -p test_qm3_live.py
 """
 import ast
+import io
 import json
 import os
+import stat
+import subprocess
 import tempfile
 import threading
 import time
+import types
 import unittest
+from unittest import mock
 
 import qm3_live as q
 
@@ -18,6 +23,24 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 def source():
     with open(os.path.join(HERE, "qm3_live.py"), encoding="utf-8") as h:
         return h.read()
+
+
+def page_fixture(d):
+    """SB3E-R196.3: a private 0700 folder holding confirm's notes and facts files."""
+    top = os.path.join(d, "fixture")
+    os.mkdir(top, 0o700)
+    for name, text in (("notes", "a\n"), ("facts", "name: a\nhours: a\nphone: 1234567\n")):
+        with open(os.path.join(top, name), "w", encoding="utf-8") as h:
+            h.write(text)
+        os.chmod(os.path.join(top, name), 0o600)
+    return {"notes": os.path.join(top, "notes"), "facts": os.path.join(top, "facts")}
+
+
+def confirm_argv(**names):
+    """The argv confirm() starts, read from the harness source itself (not a copy of it)."""
+    call = next(n for n in ast.walk(ast.parse(source())) if isinstance(n, ast.Call)
+                and getattr(n.func, "attr", "") == "Popen")
+    return [e.value if isinstance(e, ast.Constant) else names[e.id] for e in call.args[0].elts]
 
 
 class Golden(unittest.TestCase):
@@ -393,15 +416,202 @@ class ConfirmC4(unittest.TestCase):
             data = q.canonical({"run_id": "ab" * 16, "frozen": {"identity_v2": q.IDENTITY_V2}})
             with open(record, "wb") as h:
                 h.write(data)
+            pages = page_fixture(d)
             for verdict, want in (("BLOCKED", 1), ("CONFIRMED", 0)):
                 fr = os.path.join(d, "freplay.json")
                 with open(fr, "wb") as h:
                     h.write(q.canonical({"run_id": "ab" * 16, "evidence_sha256": q.sha(data), "verdict": verdict}))
-                args = {"binary": binary, "artifact_sha": q.sha_file(binary), "record": record, "freplay": fr,
-                        "golden_ci": "123", "root": d}
+                args = dict(pages, binary=binary, artifact_sha=q.sha_file(binary), record=record, freplay=fr,
+                            golden_ci="123", root=d)
                 self.assertEqual(q.confirm(args), want, verdict)
                 # SB3E-R173 R-N5: the F-replay record is checked before the binary starts.
                 self.assertEqual(os.path.exists(os.path.join(d, "started")), verdict == "CONFIRMED", verdict)
+
+
+class ConfirmPageFlags(unittest.TestCase):
+    """SB3E-R196.3: confirm starts the binary with the M-5a page flags, and refuses a bad fixture first."""
+
+    def stand_in(self, d):
+        binary = os.path.join(d, "mother-hands")
+        with open(binary, "w", encoding="utf-8") as h:
+            h.write(f"#!/bin/sh\nprintf '%s\\n' \"$@\" > {d}/argv\n"
+                    f"printf 'MODEL VERIFIED name=a digest=b identity={q.IDENTITY_V2}\\nHANDS READY\\n'\nsleep 1\n")
+        os.chmod(binary, 0o700)
+        data = q.canonical({"run_id": "ab" * 16, "frozen": {"identity_v2": q.IDENTITY_V2}})
+        fr = q.canonical({"run_id": "ab" * 16, "evidence_sha256": q.sha(data), "verdict": "CONFIRMED"})
+        for name, blob in (("evidence.json", data), ("freplay.json", fr)):
+            with open(os.path.join(d, name), "wb") as h:
+                h.write(blob)
+        return dict(page_fixture(d), binary=binary, artifact_sha=q.sha_file(binary), golden_ci="123", root=d,
+                    record=os.path.join(d, "evidence.json"), freplay=os.path.join(d, "freplay.json"))
+
+    def test_confirm_passes_the_page_flags_with_the_fixture_paths(self):
+        with tempfile.TemporaryDirectory() as d:
+            args = self.stand_in(d)
+            self.assertEqual(q.confirm(args), 0)
+            with open(os.path.join(d, "argv"), encoding="utf-8") as h:
+                argv = h.read().splitlines()
+            self.assertEqual(argv[0:1] + argv[2:3] + argv[4:], ["--home", "--workspace", "--mission", "one-page-site",
+                                                                "--notes", args["notes"], "--facts", args["facts"]])
+            self.assertTrue(all(os.path.isabs(a) for a in argv[1::2][:2] + argv[7::2]), argv)
+
+    def test_confirm_refuses_a_bad_fixture_before_the_binary_starts(self):
+        with tempfile.TemporaryDirectory() as d:
+            good = self.stand_in(d)
+            top = os.path.dirname(good["notes"])
+            os.symlink(good["notes"], os.path.join(top, "link"))
+            bad = {"relative": (dict(good, notes=os.path.relpath(good["notes"])), None, 0),
+                   "no flag": ({k: v for k, v in good.items() if k != "facts"}, None, 0),
+                   "missing file": (dict(good, facts=os.path.join(top, "absent")), None, 0),
+                   "symlink": (dict(good, notes=os.path.join(top, "link")), None, 0),
+                   "group-writable folder": (good, top, 0o770), "other-readable folder": (good, top, 0o705),
+                   "group-writable file": (good, good["notes"], 0o620),
+                   "other-writable file": (good, good["facts"], 0o602)}
+            for name, (args, path, mode) in bad.items():
+                was = path and stat.S_IMODE(os.stat(path).st_mode)
+                if path:
+                    os.chmod(path, mode)
+                self.assertEqual(q.confirm(args), 1, name)
+                if path:
+                    os.chmod(path, was)
+                self.assertFalse(os.path.exists(os.path.join(d, "argv")), name + ": the binary was started")
+                with open(os.path.join(d, "runs.jsonl"), encoding="utf-8") as h:
+                    self.assertEqual(json.loads(h.read().splitlines()[-1])["abort"]["code"], "page_fixture", name)
+            self.assertEqual(q.confirm(good), 0)
+
+
+@unittest.skipUnless(os.environ.get("QM3_HANDS"), "set QM3_HANDS=/abs/path/to/a/built/mother-hands")
+class RealParser(unittest.TestCase):
+    """SB3E-R196.3: confirm's argv against the parser of a built mother-hands. Standard input is not a terminal,
+    so an accepted argv stops at `terminal_required` (hands.rs run(): parse, then Terminal::open), before any
+    home, input file or model registration; a refused argv prints the parser's own code."""
+
+    def hands(self, argv):
+        ran = subprocess.run(argv, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=30,
+                             env={"PATH": "/usr/bin:/bin"})
+        return ran.returncode, ran.stdout, ran.stderr
+
+    def test_the_real_parser_accepts_confirms_argv_and_refuses_the_old_one(self):
+        with tempfile.TemporaryDirectory() as d:
+            at = {k: os.path.join(d, k) for k in ("home", "work", "notes", "facts")}
+            new = confirm_argv(installed=os.environ["QM3_HANDS"], **at)
+            self.assertEqual(self.hands(new), (1, "", "terminal_required\n"), new)
+            old = new[:new.index("--notes")] if "--notes" in new else new
+            self.assertEqual(old[1:], ["--home", at["home"], "--workspace", at["work"], "--mission", "one-page-site"])
+            self.assertEqual(self.hands(old), (1, "", "notes_required\n"))
+            self.assertEqual(self.hands(new[:-2]), (1, "", "facts_required\n"))
+            self.assertEqual(self.hands(new[:-1] + ["fixture/facts"]), (1, "", "absolute_path_required\n"))
+            self.assertEqual(os.listdir(d), [], "nothing was opened or created")
+
+
+GIB = 1024 * 1024 // 4  # 1 GiB of swap-in, in the 4 kB pages /proc/vmstat counts
+
+
+class PerCall(unittest.TestCase):
+    """SB3E-R196.3: steps/ mode (R191) and the per-call swap-in baseline (R192), through measure() and run_case()
+    with every external stubbed: no network, no subprocess, no replay binary."""
+
+    def live(self, at=None, interval=0.01):
+        """measure() over two one-call cases. `at` adds swap-in pages once call 1 is sent: "between" (after its
+        reply), then in call 2 "quiet" (inside quiet()), "runtime" (after quiet, before the watchdog) and "send"
+        (as the request starts; the stub then waits for the watchdog to shut its connection) or "last" (as the
+        request starts, and it returns at once)."""
+        self.pages, self.sent, self.quiets, self.dogs, at = 1000, 0, [], [], dict(at or {})
+        tripped, real_quiet, real_open = threading.Event(), q.quiet, open
+
+        def bump(point):
+            self.pages += at.pop(point, 0) if self.sent == 1 else 0
+
+        def request(method, path, body=None, timeout=10, conns=None):
+            if path == "/api/ps":
+                bump("quiet")
+                return 200, b'{"models":[]}'
+            self.assertEqual(path, "/api/chat")
+            bump("last")
+            if "send" in at and self.sent == 1:
+                conns.append(types.SimpleNamespace(sock=types.SimpleNamespace(shutdown=lambda how: tripped.set())))
+                bump("send")
+                tripped.wait(5)
+            self.sent += 1
+            return 200, b"{}"
+
+        def runtime():
+            bump("runtime")
+            return {"version": q.VERSION, "cloud_disabled": True, "tags": {"digest": q.DIGEST},
+                    "thinking_capability": True}
+
+        def replay_step(replay, step_dir, step):
+            bodies = [q.sha(q.chat_body(step["shape"], m)) for m in step["markers"]]
+            if len(step["replies"]) < len(bodies):
+                return {"next": {"sha256": bodies[-1], "correction": None}}
+            bump("between")
+            return {"bodies": bodies, "next": None,
+                    "outcome": {"kind": "file", "check": True, "check_facts": True, "email_scan": True}}
+
+        def quiet(start):
+            ok, seen = real_quiet(start)
+            self.quiets.append((start, seen["swap_in_delta_kb"]))
+            return ok, seen
+
+        class Dog(q.Watchdog):
+            def __init__(dog, start):
+                super().__init__(start, interval=interval)
+                dog.start = start
+                self.dogs.append(dog)
+
+        stubs = {"request": request, "runtime": runtime, "runtime_ok": lambda r: True, "replay_step": replay_step,
+                 "quiet": quiet, "Watchdog": Dog, "check_runner": lambda *a: None, "runner_identity": lambda: [],
+                 "_swap_in": lambda: self.pages, "_meminfo": lambda: 64 * 1024 * 1024, "QUIET_WAIT": -1,
+                 "CASES": [("QM-N1", "N", None), ("QM-N2", "N", None)],
+                 "open": lambda path, *a, **k: (io.StringIO("0.00 0.00 0.00 1/1 1\n") if path == "/proc/loadavg"
+                                                else real_open(path, *a, **k))}
+        ran = types.SimpleNamespace(stdout="0\n", returncode=0)
+        with tempfile.TemporaryDirectory() as d, mock.patch.multiple(q, create=True, **stubs), \
+                mock.patch.object(q.subprocess, "run", lambda *a, **k: ran):
+            bundle = os.path.join(d, "bundle")
+            os.mkdir(bundle, 0o700)
+            args = {"root": d, "replay": "/nonexistent", "candidate": "a" * 40, "harness_sha": "0" * 64, "ci_run": "1"}
+            out, _ = q.measure(args, {"sha256": "0" * 64, "built_from": "a" * 40}, q.golden_table(),
+                               os.path.join(d, "runs.jsonl"), [], "ab" * 16, bundle, [])
+            self.modes = {os.path.relpath(top, bundle): stat.S_IMODE(os.stat(top).st_mode)
+                          for top, _, _ in os.walk(bundle) if top != bundle}
+        return out
+
+    def test_steps_is_0700_under_umask_0002(self):
+        old = os.umask(0o002)
+        try:
+            self.assertIsNone(self.live()["abort"])
+        finally:
+            os.umask(old)
+        # runtime_root.rs parents_are_safe: no folder above the replay's TMPDIR (steps/) is group-writable.
+        self.assertEqual(self.modes, {"QM-N1": 0o700, "QM-N1/steps": 0o700, "QM-N2": 0o700, "QM-N2/steps": 0o700})
+
+    def test_churn_before_a_call_does_not_abort(self):
+        out = self.live({"between": 2 * GIB})
+        self.assertIsNone(out["abort"], out)
+        self.assertEqual([(c["verdict"], c["calls"][0]["quiet"]["swap_in_delta_kb"]) for c in out["cases"]],
+                         [("pass", 0), ("pass", 0)])
+
+    def test_churn_over_1_gib_during_a_call_still_aborts_not_quiet(self):
+        out = self.live({"between": GIB // 4, "quiet": GIB + 1})
+        self.assertEqual(out["abort"], {"code": "not_quiet", "case": "QM-N2", "call": 1})
+        self.assertEqual(self.quiets[-1][1], 1024 * 1024 + 4, "measured from this call's start; the bound is 1 GiB")
+        self.assertIsNone(self.live({"between": GIB // 4, "quiet": GIB})["abort"], "exactly 1 GiB is quiet")
+
+    def test_the_watchdog_and_quiet_share_the_call_baseline(self):
+        half = 6 * GIB // 10
+        out = self.live({"between": GIB // 4, "runtime": half, "send": half})
+        self.assertEqual(out["abort"], {"code": "memory_watchdog", "case": "QM-N2", "call": 1})
+        self.assertEqual(self.dogs[-1].tripped["swap_in_delta_kb"], 2 * half * 4)
+        self.assertEqual([d.start for d in self.dogs], [1000, 1000 + GIB // 4])
+        self.assertEqual([d.start for d in self.dogs], [start for start, _ in self.quiets[1:]])
+
+    def test_swap_in_inside_the_last_watchdog_interval_still_trips(self):
+        # SB3E-R263 F1: the watchdog takes no sample of its own here (60 s interval); the read at its stop sees it.
+        out = self.live({"between": GIB // 4, "last": GIB + 1}, interval=60)
+        self.assertEqual(out["abort"], {"code": "memory_watchdog", "case": "QM-N2", "call": 1})
+        self.assertEqual(self.dogs[-1].tripped["swap_in_delta_kb"], 1024 * 1024 + 4)
+        self.assertIsNone(self.live({"between": GIB // 4, "last": GIB}, interval=60)["abort"], "exactly 1 GiB")
 
 
 class NetworkAllowlist(unittest.TestCase):
@@ -429,7 +639,8 @@ class NetworkAllowlist(unittest.TestCase):
                 heads.append(head.value if isinstance(head, ast.Constant) else head.id)
                 for e in argv.elts[1:]:
                     self.assertTrue(isinstance(e, ast.Constant) or (isinstance(e, ast.Name)
-                                                                    and e.id in ("home", "work")), ast.dump(e))
+                                                                    and e.id in ("home", "work", "notes", "facts")),
+                                    ast.dump(e))
         # SB3E-R172 F6: no PATH lookup; every literal program is absolute.
         self.assertEqual(sorted(set(heads)), ["/usr/bin/nvidia-smi", "/usr/bin/pgrep", "/usr/bin/ss", "installed",
                                               "replay"])

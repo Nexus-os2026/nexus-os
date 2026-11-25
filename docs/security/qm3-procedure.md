@@ -30,14 +30,14 @@ The frozen values and the replay contract are QM3-H1's half (`docs/security/qm3-
 ### Per live call (§6.2)
 
 0. **Ledger START** (SB3E-R172 F2), before the first request: `{"kind":"run","verdict":"STARTED"}`. Any exit that is not a verdict or an abort line writes ABORTED (`interrupted` or `harness_exception`). Every ABORTED line keeps the ids of the cases already missed (SB3E-R173).
-1. **Quiet.** No compiler process, load1 ≤ 4.0, MemAvailable ≥ 6 GiB, swap-in growth ≤ 1 GiB, no other client on :11434, no other loaded model, no Mother process. It waits up to 600 s; if the host is still not quiet, the run is ABORTED.
+1. **Quiet.** No compiler process, load1 ≤ 4.0, MemAvailable ≥ 6 GiB, swap-in growth ≤ 1 GiB since this call's start, no other client on :11434, no other loaded model, no Mother process. It waits up to 600 s; if the host is still not quiet, the run is ABORTED.
 2. **Runtime check.** It is the same as preflight, every call. Any change: ABORTED. **Q-8** (SB3E-R172 F4): after the first live call exactly one `llama-server` runner exists; its PID and `/proc` start time never change, checked before and after every call and at the end. Any change: ABORTED.
 3. **Marker.** A fresh uuid4 hex, different from the case's previous marker.
 4. **Bind.**
    - Write the step file and run `qm3_step` (B1: equal body sha256, the same correction code).
    - B2: the masked hash equals the golden for its shape.
    - Any failure: ABORTED before sending.
-5. **Send.** `POST /api/chat` with a 180 s timeout. Keep the exact reply bytes. **Q-4 watchdog** (SB3E-R172 F4): during the call, every second, MemAvailable ≥ 6 GiB and swap-in growth ≤ 1 GiB; a trip shuts the connection (the runtime cancels the request) and the run is ABORTED. A watchdog that died (not tripped), checked before and after the call, also ends the run ABORTED (SB3E-R173).
+5. **Send.** `POST /api/chat` with a 180 s timeout. Keep the exact reply bytes. **Q-4 watchdog** (SB3E-R172 F4): during the call, every second and once more when the call ends (SB3E-R263), MemAvailable ≥ 6 GiB and swap-in growth ≤ 1 GiB since this call's start; a trip shuts the connection (the runtime cancels the request) and the run is ABORTED. A watchdog that died (not tripped), checked before and after the call, also ends the run ABORTED (SB3E-R173).
    - **A timeout is a miss** (SB3E-R168): the case ends with outcome `live_timeout`, and the run becomes BLOCKED.
 6. **Decide.** Run `qm3_step` again with the reply appended. Its bodies must start with every body sent so far (SB3E-R172 F5), else ABORTED. `done` ends the case with the production outcome; `next` means the production lane would correct.
 7. **Scan.** Check the reply content for the case's forbidden tokens.
@@ -48,6 +48,13 @@ The frozen values and the replay contract are QM3-H1's half (`docs/security/qm3-
 2. **Consistency replay.** Every final step is replayed again; the outcome and every body hash (the scripted call 1 for QM-C, then each body sent) must be equal, else BLOCKED (SB3E-R172 F5).
 3. **read_chat** (SB3E-R172 F1). Every call must pass production read_chat: only a page or a draft-level refusal proves that. Any other outcome (a transport refusal such as `model_truncated`, a timeout, kind `other`) is the miss `read_chat`, in every case. freplay's CONFIRMED also needs it at F.
 4. **Verdict.** Evaluate §8.1, then write the canonical record `evidence-<run_id>.json` and the ledger line. The record is content-free: hashes, counts, codes and booleans only, with no model text. The raw bundle stays in `/home/nexus/.m2d/qm3/<run_id>/` (mode 0700) and is bound by `raw_bundle_sha256`.
+
+## QM3-H3: the confirm-time harness (SB3E-R196.3)
+
+- **Run under umask 077** (O-2 and O-5). The harness now creates each case folder and its `steps/` with mode 0700 itself (SB3E-R191), so the replay no longer depends on the umask. The umask still keeps the ledger, the record and the reply files private.
+- **Swap cleared before O-2** (SB3E-R192). The Owner runs `sudo swapoff -a && sudo swapon -a`; the Architect checks that swap used is about 0 and MemAvailable is above the 36 GiB start floor before giving the go.
+- **The confirm form.** `confirm --binary B --artifact-sha HEX --record F --freplay F --golden-ci ID --root DIR --notes F --facts F`. The binary is started with the M-5a page flags: `--home H --workspace W --mission one-page-site --notes F --facts F`. `--notes` and `--facts` must be absolute, symlink-free regular files that group and others cannot write, each in a private 0700 folder of the operator. Anything else is refused before the binary starts (ledger code `page_fixture`).
+- **The confirm-time pin.** O-5 runs the QM3-H3 harness; its sha256 is recorded in the QM3-H3 hand-back, not in this file. The Phase M record stays bound to `5f4548e4…`, the harness it ran.
 
 ## Owner steps (§11)
 

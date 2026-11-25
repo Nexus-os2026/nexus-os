@@ -8,9 +8,10 @@
   verify --record F --bundle D   recompute evidence_sha256 and raw_bundle_sha256
   freplay --bundle D --candidate SHA --replay BIN --replay-meta F --harness-sha HEX --root DIR
                                  Phase R2: every step replayed on the code head (no network)
-  confirm --binary B --artifact-sha HEX --record F --freplay F --golden-ci ID --root DIR
+  confirm --binary B --artifact-sha HEX --record F --freplay F --golden-ci ID --root DIR --notes F --facts F
                                  Phase C: the binary is the approved artifact (checked before it starts), the
-                                 marker is absent, and its startup identity equals the record's
+                                 marker is absent, and its startup identity equals the record's; --notes and
+                                 --facts are absolute files in a private 0700 folder (the M-5a page flags)
 
 Measure marker (G-Q4): NEXUS-QM3-MEASURE-v1. The harness sets no variable, flag or file that a Mother binary
 reads; QM3_STEP is read only by the cfg(test) replay test binary (SB3E-R168).
@@ -488,11 +489,15 @@ class Watchdog:
         if self.tripped is None and (self.died is not None or not self.thread.is_alive()):
             raise WatchdogDied(self.died)
 
+    def sample(self):
+        mem, swap = self.read()
+        if mem < 6 * 1024 * 1024 or swap > 1024 * 1024:
+            self.tripped = {"mem_available_kb": mem, "swap_in_delta_kb": swap}
+        return self.tripped is not None
+
     def watch(self):
         while not self.stop.wait(self.interval):
-            mem, swap = self.read()
-            if mem < 6 * 1024 * 1024 or swap > 1024 * 1024:
-                self.tripped = {"mem_available_kb": mem, "swap_in_delta_kb": swap}
+            if self.sample():
                 for conn in list(self.conns):
                     try:
                         conn.sock.shutdown(2)
@@ -507,6 +512,9 @@ class Watchdog:
     def __exit__(self, *exc):
         self.stop.set()
         self.thread.join()
+        # SB3E-R263 F1: one last read on the same baseline, so growth inside the final interval still trips.
+        if self.tripped is None and self.died is None:
+            self.sample()
 
 
 def wait_quiet(swap_start):
@@ -555,12 +563,17 @@ def run_case(ctx, cid, base, scripted):
     """One case: per call quiet, runtime, marker, bind (B1-B3), send, decide by the replay (section 6.2)."""
     golden = {(b, v): h for b, v, h in ctx["table"]}
     case_dir = os.path.join(ctx["bundle"], cid)
-    os.makedirs(os.path.join(case_dir, "steps"))
+    # SB3E-R191: the replay's TMPDIR and the folder above it are 0700 whatever the umask (the broker refuses a
+    # group-writable folder above its runtime root).
+    os.mkdir(case_dir, 0o700)
+    os.mkdir(os.path.join(case_dir, "steps"), 0o700)
     markers, replies, calls = ([uuid.uuid4().hex] if scripted is not None else []), [], []
     correction = scripted
     while True:
         n = len(calls) + 1
-        ok, q = wait_quiet(ctx["swap_start"])
+        # SB3E-R196.3 (R192): swap-in is measured from this call's start; quiet() and the watchdog share it.
+        swap_start = _swap_in()
+        ok, q = wait_quiet(swap_start)
         if not ok:
             raise Abort("not_quiet", cid, n, q)
         r = runtime()
@@ -580,7 +593,7 @@ def run_case(ctx, cid, base, scripted):
         with open(os.path.join(case_dir, f"call{n}.request"), "wb") as h:
             h.write(body)
         start = time.monotonic()
-        with Watchdog(ctx["swap_start"]) as dog:
+        with Watchdog(swap_start) as dog:
             dog.check()
             try:
                 status, raw = request("POST", "/api/chat", body, timeout=CALL_TIMEOUT, conns=dog.conns)
@@ -687,7 +700,7 @@ def measure(args, meta, table, ledger, prior, run_id, bundle, missed):
     ok, q = quiet(_swap_in())
     if not runtime_ok(r) or not ok or q["mem_available_kb"] < 36 * 1024 * 1024:
         return abort(ledger, run_id, "preconditions", missed=missed), 1
-    ctx = {"table": table, "bundle": bundle, "replay": args["replay"], "swap_start": _swap_in()}
+    ctx = {"table": table, "bundle": bundle, "replay": args["replay"]}
     cases = []
     try:
         for cid, base, scripted in CASES:
@@ -812,6 +825,26 @@ def artifact_bound(args, blob):
     return False
 
 
+def page_fixture(args):
+    """SB3E-R196.3: confirm's --notes and --facts, as the installed parser needs them (inputs.rs
+    parse_page_args): absolute, symlink-free regular files that group and others cannot write, each in a
+    private 0700 folder of this user. None refuses, before the binary starts."""
+    paths = []
+    for flag in ("notes", "facts"):
+        path = args.get(flag) or ""
+        if not os.path.isabs(path) or os.path.realpath(path) != os.path.normpath(path):
+            return None
+        try:
+            one, top = os.lstat(path), os.lstat(os.path.dirname(path))
+        except OSError:
+            return None
+        if (not stat.S_ISREG(one.st_mode) or one.st_mode & 0o022 or not stat.S_ISDIR(top.st_mode)
+                or stat.S_IMODE(top.st_mode) != 0o700 or {one.st_uid, top.st_uid} != {os.geteuid()}):
+            return None
+        paths.append(os.path.normpath(path))
+    return paths
+
+
 def confirm(args):
     """Phase C: the installed binary is the approved artifact (C-1), carries no measure marker (C-2), and one
     registration-only startup prints the record's identity (C-3). It types `quit`; no chat is made. The bytes
@@ -845,11 +878,19 @@ def confirm(args):
             ledger_line(os.path.join(args["root"], "runs.jsonl"), {"kind": "confirm", "verdict": "REFUSED",
                                                                    "abort": {"code": "freplay"}})
             return 1
+        pages = page_fixture(args)
+        if pages is None:
+            ledger_line(os.path.join(args["root"], "runs.jsonl"), {"kind": "confirm", "verdict": "REFUSED",
+                                                                   "abort": {"code": "page_fixture"}})
+            print("QM3 CONFIRM REFUSED --notes and --facts must be absolute regular files in a private 0700 folder")
+            return 1
+        notes, facts = pages
         home, work = os.path.join(tmp, "home"), os.path.join(tmp, "workspace")
         os.mkdir(home, 0o700)
         os.mkdir(work, 0o700)
         parent, child = pty.openpty()
-        proc = subprocess.Popen([installed, "--home", home, "--workspace", work, "--mission", "one-page-site"],
+        proc = subprocess.Popen([installed, "--home", home, "--workspace", work, "--mission", "one-page-site",
+                                 "--notes", notes, "--facts", facts],
                                 stdin=child, stdout=child, stderr=child, close_fds=True)
         os.close(child)
         deadline = time.monotonic() + 60
