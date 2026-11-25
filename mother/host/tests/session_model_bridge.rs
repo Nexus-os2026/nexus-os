@@ -306,7 +306,7 @@ delivery|sb3_mother_post_seal_model_events_are_absent
 /// the verifier compares them. It shows consistency, not that a test ran.
 const CELLS_RS: &str = include_str!("route_cells/cells.rs");
 const EXPECT: &str = include_str!("session/model-bridge-expect.tsv");
-const EXPECT_SHA256: &str = "dfc98814c6e58eac12213ac6145dcc26e4ad7e08624c48795e09493e3c6e8db1";
+const EXPECT_SHA256: &str = "a308ff85b40a9e2ca72c98fe0c38702284f749b65d2bf087dcdc646e12bb75bc";
 const UNIVERSE_SHA256: &str = "a6a5337538a92d273dd2efdcaedcf76843bbf2f3ddc6be1f6f44f3c241985fd2";
 const EXPECT_HEADER: &str = "route\tsink\tdim\tvalues\tmech\tsetup\tdriver\tentry\tcheck\texit\texec\tapply\texpect\twitness\tcontrol\tplant\trefs\tstatus";
 /// R4: `reader:` is these literal bytes, or one of the three closed paths.
@@ -2132,13 +2132,13 @@ fn sb3d_r3_d1_cells_are_executed_or_owned() {
             count("open:F1"),
             count("open:M2e-D")
         ),
-        (280, 0, 490, 1, 28),
-        "after D2, U5b's six, U9a's eleven, U6a-1's three, U9b's five, SEAM-1's seven, U19a's 40, U21a's five, U19b-1's 44, U19b-2's 36, U20b's 12, U19c's five, U20c's 31 and SEAM-2's 30 credited cells: {summary:?}"
+        (325, 0, 457, 1, 28),
+        "after D2, U5b's six, U9a's eleven, U6a-1's three, U9b's five, SEAM-1's seven, U19a's 40, U21a's five, U19b-1's 44, U19b-2's 36, U20b's 12, U19c's five, U20c's 31, SEAM-2's 30 and CELL-R-A's 45 credited cells: {summary:?}"
     );
     assert_eq!(
         count("cited"),
-        151,
-        "quit, fatal, six U9a cells, SEAM-1's primary_end SealedFinalizing, U19a's 534-537, 86-88, 665 and 417-419, U19b-1's 653, 405-407, 453-455, 465-467, 477-479 and 489-491, and U19b-2's 120-122, 133, 137-139, 150, 154-156, 167, 547-550, 552-555 and 557-560, U20c's 48, 65, 519-522 and 524-527, and SEAM-2's 82 and 529-532 moved to x:rc_"
+        139,
+        "quit, fatal, six U9a cells, SEAM-1's primary_end SealedFinalizing, U19a's 534-537, 86-88, 665 and 417-419, U19b-1's 653, 405-407, 453-455, 465-467, 477-479 and 489-491, and U19b-2's 120-122, 133, 137-139, 150, 154-156, 167, 547-550, 552-555 and 557-560, U20c's 48, 65, 519-522 and 524-527, SEAM-2's 82 and 529-532, and CELL-R-A's 35-37, 52-54, 69-71 and 299-301 moved to x:rc_"
     );
 }
 
@@ -2158,8 +2158,8 @@ fn sb3d_r3_d1_cells_are_executed_or_owned() {
 /// (lane_result_admission, post_record_recheck, record_first_classify).
 /// SEAM-2 (SB3E-R242): six
 /// call_slot_reserve, six attempt_ticket, twelve charge_append and six
-/// meter_settle cells.
-const CREDITED: [&str; 235] = [
+/// meter_settle cells. CELL-R-A (SB3E-R265): 45 race A byte cells (docs 14.26).
+const CREDITED: [&str; 280] = [
     "r5/call_chat/ingress/original_cell_unscheduled",
     "r5/call_chat/ingress/repeated",
     "r5/call_chat/ingress/mission_stop",
@@ -2395,6 +2395,51 @@ const CREDITED: [&str; 235] = [
     "r4/meter_settle/lifecycle/Failed",
     "r4/meter_settle/lifecycle/ClosingNormal",
     "r4/meter_settle/lifecycle/ClosingRestricted",
+    "r2/inference_binding/ingress/CR",
+    "r2/inference_binding/ingress/LF",
+    "r2/inference_binding/ingress/CRLF",
+    "r2/inference_binding/ingress/EOF",
+    "r2/inference_binding/ingress/partial_Ctrl_D",
+    "r2/inference_binding/ingress/master_close",
+    "r3/attempt_ticket/ingress/CR",
+    "r3/attempt_ticket/ingress/LF",
+    "r3/attempt_ticket/ingress/CRLF",
+    "r3/attempt_ticket/ingress/EOF",
+    "r3/attempt_ticket/ingress/partial_Ctrl_D",
+    "r3/attempt_ticket/ingress/master_close",
+    "r3/call_slot_reserve/ingress/EOF",
+    "r3/call_slot_reserve/ingress/partial_Ctrl_D",
+    "r3/call_slot_reserve/ingress/master_close",
+    "r4/meter_settle/ingress/CR",
+    "r4/meter_settle/ingress/LF",
+    "r4/meter_settle/ingress/CRLF",
+    "r4/meter_settle/ingress/EOF",
+    "r4/meter_settle/ingress/partial_Ctrl_D",
+    "r4/meter_settle/ingress/master_close",
+    "r7/attempt_pin_release/ingress/CR",
+    "r7/attempt_pin_release/ingress/LF",
+    "r7/attempt_pin_release/ingress/CRLF",
+    "r7/attempt_pin_release/ingress/EOF",
+    "r7/attempt_pin_release/ingress/partial_Ctrl_D",
+    "r7/attempt_pin_release/ingress/master_close",
+    "r7/attempt_record/ingress/CR",
+    "r7/attempt_record/ingress/LF",
+    "r7/attempt_record/ingress/CRLF",
+    "r7/attempt_record/ingress/EOF",
+    "r7/attempt_record/ingress/partial_Ctrl_D",
+    "r7/attempt_record/ingress/master_close",
+    "r7/operation_complete/ingress/CR",
+    "r7/operation_complete/ingress/LF",
+    "r7/operation_complete/ingress/CRLF",
+    "r7/operation_complete/ingress/EOF",
+    "r7/operation_complete/ingress/partial_Ctrl_D",
+    "r7/operation_complete/ingress/master_close",
+    "r8/post_record_recheck/ingress/EOF",
+    "r8/post_record_recheck/ingress/partial_Ctrl_D",
+    "r8/post_record_recheck/ingress/master_close",
+    "r8/record_first_classify/ingress/EOF",
+    "r8/record_first_classify/ingress/partial_Ctrl_D",
+    "r8/record_first_classify/ingress/master_close",
 ];
 /// U5b: `manifest` with the six credited entries first, for a control whose
 /// register keeps the real one's six `x:rc_` cells (each control's own

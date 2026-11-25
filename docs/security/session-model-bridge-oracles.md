@@ -1845,15 +1845,14 @@ call's first arrival (`s5.rs` `called`, as `ord3_quit`).
 **F1 (binding on M-5b, restated).** Every credited call row is "harness composition until
 M-5b": U5's x:93-96, 98, 99; U19a's x:86-91, 534-537; these 36; U19c's 5 identity and bind
 rows x:298, 307, 312, 607, 608 (14.23); SEAM-2's 30 attempt and meter rows x:77, 82, 111, 116,
-188-193, 196, 201, 339, 344, 529-532, 539-542, 569-572, 630-633 (14.24); and U20c's 31 rows x:43,
-48, 60, 65, 316-321, 324, 327, 357, 362, 371, 399, 519-522, 524-527, 625-628, 636-638 (14.25).
-M-5b owes: a production-order guard (the page call and the identity and bind sinks run on a
+188-193, 196, 201, 339, 344, 529-532, 539-542, 569-572, 630-633 (14.24); U20c's 31 rows x:43,
+48, 60, 65, 316-321, 324, 327, 357, 362, 371, 399, 519-522, 524-527, 625-628, 636-638 (14.25); and
+CELL-R-A's 45 rows x:35-40, 52-57, 69-74, 106-108, 299-304, 331-336, 349-354, 366-368, 394-396
+(14.26). M-5b owes: a production-order guard (the page call and the identity and bind sinks run on a
 worker or exchange thread, never the reader; the reader stays live until after the work join,
-hands.rs:1390-1391; Stop is bound before the run, hands.rs:1157); a re-run of each of those 118
-rows, by key, on M-5b's own composition; U19c's 15 open rows (x:286-291, 294, 606, 609, S2;
-x:299-304, F5), SEAM-2's 22 (the 18 byte rows x:69-74, 103-108, 331-336, races A and B;
-read_failure x:75, 109, 194, 337) and U20c's 24 (x:35-40, 52-57, 349-354, 366-368, 394-396;
-14.25) run there first; and U22's set-B check re-run after M-5b and before O-4.
+hands.rs:1390-1391; Stop is bound before the run, hands.rs:1157); a re-run of each of those 163
+rows, by key, on M-5b's own composition; U19c's 9 open rows (x:286-291, 294, 606, 609, S2) and
+SEAM-2's 7 (x:103-105, race B, 14.26; read_failure x:75, 109, 194, 337) run there first; and U22's set-B check re-run after M-5b and before O-4.
 
 **Harness pieces (R216 F6).** The ord-n profile (`refused_at`: `n` gates, no charge or settle,
 no charge position); INV bound by the Builder's `mother.recheck` of S and Q
@@ -2145,3 +2144,38 @@ exist; owed, not this unit.
 mutation, tests and expect: the seven main.rs terminal-arm rows (now with U20c's six `ctl!`
 entries), the three count-after-the-call rows and r42_drive_call_span_stretched_reset (on
 `drive_call`'s new body), and r55_cells_row_malformed (ROUTE_CELLS' last rows, rehashed).
+
+### 14.26 SB-3E CELL-R-A: race A under the Stop-first barrier (SB3E-R265)
+
+**Credited (45, set B), harness composition until M-5b (F1, R216).** The six byte rows of
+inference_binding x:299-304, attempt_ticket x:69-74, meter_settle x:331-336, attempt_pin_release
+x:35-40, attempt_record x:52-57 and operation_complete x:349-354, and EOF, partial_Ctrl_D,
+master_close of call_slot_reserve x:106-108, post_record_recheck x:366-368 and
+record_first_classify x:394-396. Each cell is in the section that owns its pair
+(route_seams_guard.rs `arm_binding`); the barrier's body is `sched.rs`.
+
+**Barrier (`stop_first`).** A typed value runs the bound Stop (`stop_all`, run.rs:1162) against
+the advancing worker's `SessionDoor::cancel_run` → `cancel_one` (run.rs:1839-1854); the first to
+take the runs lock writes the record. A second pause at `door.cancel_run` (host_session.rs:1405,
+before any lock) is armed while the sink's hold stands; the sink is released; at the worker's
+acknowledgement the Stop's settle is awaited (bounded), then the door released. It runs only for
+a typed, non-lane row whose frozen witness names a schedule.
+
+**F2 (`named`).** `sched=stop_first` is rendered only when all hold: the acknowledgement is
+`door.cancel_run`'s, of S and RUN, on the advancing worker's thread; Stop settled; exactly one
+`emergency_stop` commit before the release; its `runs_cancelled` is 1 (authority/mod.rs:1085);
+the Stop's receipt cancelled 1; no `run_cancelled` of the run. The rule test loses the name under
+each of the 8 single-clause inversions. The bridge closes the key: `stop_first` only, once, on a
+credited reader row whose ledger is the Stop's records. Controls: unforced inverse, stray record.
+
+**TR-1 (data commit), by key.** All 45 gain `sched=stop_first`. Ledger (a multiset): x:35-40,
+69-74, 106-108, 299-304, 349-354, 366-368, 394-396 `+0:all[s=S]` → `+1:emergency_stop[s=S]`,
+`+1:MissionEnd[s=S]`; x:52-57 gain those two after their `+1:model_call`; x:331-336 `+0:all[s=S]`
+→ all three. Reason: Stop-first writes the Stop's record and the mission's end (`Trigger::Stop`,
+coordinator.rs:2837); `cancel_one` finds the run cancelled and writes nothing (run.rs:1840).
+`window` → `completed_attempt` on x:35-40, 52-57, 331-336, 349-354, 366-368, 394-396 (as 14.25).
+
+**Not credited, owed.** Race B, x:103-105: the `StopWatch` against the slot check needs a
+production note (deferred, R265.4). Door-first, all 48 keys (the 45 and x:103-105): the Stop
+worker's path has no route point (`record_stop` host_session/stop.rs:162, `stop_all` run.rs:1162;
+`store.commit` evidence_store.rs:1375 is after `stop_all`); ledger.
