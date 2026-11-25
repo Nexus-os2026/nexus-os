@@ -73,6 +73,14 @@ pub(crate) fn route_cells_files() -> Vec<(String, Vec<u8>)> {
     files.iter().map(|p| (rel(p), read(p))).collect()
 }
 
+/// SB-3E U22: one data file of the crate, read at run time, so a built guard
+/// sees a planted file (only the adapter touches the host). A file that
+/// cannot be read is a panic naming it.
+pub(crate) fn route_guard_data(rel: &str) -> String {
+    let file = crate_root().join(rel);
+    std::fs::read_to_string(&file).unwrap_or_else(|e| panic!("{rel}: {e}"))
+}
+
 /// SB3E-R55.2 (Fable A-1): the route guard's source set, failing closed:
 /// every `.rs` file under `root` as `(path relative to it, text)`, sorted,
 /// with a finding for a symlink anywhere, an entry that cannot be read, a

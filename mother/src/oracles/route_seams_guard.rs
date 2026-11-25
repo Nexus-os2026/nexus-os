@@ -4707,3 +4707,5 @@ fn sb3e_u20b_door_callers() {
     }
     fail_on(misses);
 }
+/// SB-3E U22: the set-B activation check (SB3E-R255.2, R260).
+mod activation;

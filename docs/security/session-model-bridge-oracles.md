@@ -2268,3 +2268,78 @@ through `Reading::close` (`Terminal::finish`), `late` also through `settled`. F9
 digest moves with the compiler, so `route_read.c` does not change here. The other 15
 read_failure keys stay owed (R255.2); this section replaces "GB4b" for these ten keys in the
 ledgers of 14.20, 14.22 and 14.25.
+
+### 14.28 SB-3E U22: the set-B activation check (SB3E-R196.1, R255.2, R260)
+
+**What it is.** `mother/src/oracles/route_seams_guard/activation.rs` joins, by key, the expect
+table (905 keys), the literal credit manifest (`cells.rs`) and the generated register
+`mother/host/tests/session/model-bridge-activation.tsv`. **It is a source-fact guard: it reads
+source text and data files. It is not runtime proof that a sink is unreachable.** The check is
+`sb3e_u22_every_set_b_key_is_credited_resolved_or_owed`; no list excuses a key.
+
+**Set B (R260.2).** A B-valued row (R196.1: byte or close_report mechanism, ingress `quit` or
+`repeated`, or an Owner-causable lifecycle value) whose status is `open` or
+`hold:unreachable_by_production_order`. A B-valued row under an earlier `hold:` word is W2.
+
+**The three states of an uncredited set-B key.**
+
+| State | Legal when | Otherwise |
+|---|---|---|
+| `resolved` | the closed `reviewed` list names the row (`tr1_hold`: the TR-1 hold word; `w1_type`: 14.18, 14.19; `w3_event`: 14.18, 14.22) and the row's guard is green (`order`, `close_callers`, `door_callers`; `none` for the four close_report by-event rows) | `unknown resolution`, `unknown guard`, `reopened` |
+| `owed` | the key is in the owed set and every owed fact holds | `owed refused`, `expired` |
+| `uncredited` | never: a cell must credit the key | `missing` |
+
+A set-B key with no row is `missing`; a credited key with a row, or a key with two rows, is a
+`duplicate`; a row for a key outside set B and W1, or outside the table, is `unknown`.
+
+**The owed set (R255.2, R265.4).** Only a key on one of the 15 model-path sinks (`MODEL_PATH`;
+`lane_result_admission`, `cancel_run` and the eight registration sinks are reached by the shipped
+host today and may never be owed) that is: a `read_failure` ingress row; one of the nine S2
+identity rows (14.23); or a race B row (call_slot_reserve CR, LF, CRLF). The set is pinned by
+count and sha256 of its sorted keys (`OWED`); the pin is compared with the register's own owed
+rows.
+
+**The owed facts (`owed_fact_findings`).** Each form's tokens must occur exactly once in
+production text, inside the named `fn`; a missing, repeated or moved anchor expires every owed key.
+
+| Fact | Form | Where |
+|---|---|---|
+| F1 page `run` is refused | the refusal branch before the dispatch; `let model = page_args.is_some();`; `page_preview` names no runtime, producer or door | hands.rs `run`, `page_preview` |
+| F2 cap 0 on every shipped lane | the trait default `{ 0 }`; the host builds `ScriptedLane`s wrapped in `ObservedLane`; neither impl defines a cap; `fn max_model_calls` exists only in lane.rs and page_builder/lane.rs | hands.rs `run`, lane.rs |
+| F3 no identity without a positive cap | both sites (R260.1 F1): `run_lanes` (`(cap > 0).then(..model_identity())`) and `submit` (`.any(..max_model_calls() > 0) && ..model_identity()`); the caller is reserved and admitted only under `cap > 0` | coordinator.rs |
+| D1 site list | every production occurrence, not after `fn`, of `model_identity`, `admit_inference`, `max_model_calls`, `PageBuilderLane`, `page_preview` (`OWED_SITES`) | Mother's tree |
+
+**The W1 guard (`w1_findings`; R196.1, R214.3 D1, R260.1 F6).** One guard per event, over
+Mother's tree and crates/nexus-governed-control (`gc:` rows). It pins, as a multiset, every
+production occurrence of the primitive's name not preceded by `fn`: `stop` (mission_stop),
+`stop_all`, and `revoke_grant`, `revoke`, `route_revoke_original_grant` (grant_revocation). So a
+call, a method value, a `use .. as` alias, a raw identifier and a UFCS path are all rows. A new
+row reopens that event's keys. The one production revoker is `close_session_authority`'s loop
+(governed.rs); `revoke_grant`'s only caller is the S3 seam. Limit: the guard sees the primitive's
+own name, not a call through an already pinned wrapper of another name. A `#[path]` test module
+counts as production (R214.3 D2), which is fail safe.
+
+**The report.** The check prints, by key, the owed keys (the race B keys x:103-105 among them),
+W2 (hold and amend words; the nine denial rows as `denial: oracle missing`, R260.4) and W3. The
+report is information, never a pass. T7 is the existing source guard (`t7_findings`); its
+findings are findings of this check.
+
+**The register and the G5 step (R260.6 F8).** The register is generated data:
+`python3 -I mother/src/oracles/route_seams_guard/activation_register.py` rewrites it from the
+expect table, `CREDITED` and the reviewed resolutions, and prints the owed pin; `--check` writes
+nothing and exits 1 on a difference. The check re-derives every row's class on its own, so a
+stale row is a finding. A unit that credits a key regenerates the register (its row goes). On
+3ec9759a the register has 55 `uncredited` rows (45 race A, 10 reachable read_failure) and the
+check is red on exactly those; it is regenerated on the merged G5 head, where it must be green.
+`sb3e_u22_red_is_the_uncredited_rows_and_green_once_credited` proves both directions on any head.
+
+**Hard rule 1.** The binary-against-lane differential (T7, T8) needs a shipping recipe for
+`mother-hands` and goes to M-7 (R260.3). F7 is binding on M-5b-1a: an `ObservedLane` that
+forwards the cap breaks F2 by text, so the owed state dies at 1a unless 1a first credits or
+resolves the owed keys, or rewrites F2 under review. On a tree that dispatches pages F1 is gone
+and every owed key expires; this unit proves that by plant only.
+
+**Plants (`mbin`, 18).** `u22_p_*` in route_plants.json: the refusal dispatched; a lane with cap 1
+(three forms); each identity site and the caller uncapped; an anchor gone; a new identity caller;
+four W1 caller forms and one governed-control caller; an owed row outside the set, on a reachable
+sink, duplicated, and dropped.
