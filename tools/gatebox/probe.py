@@ -289,6 +289,20 @@ def host_pty_denied(path):
     else:
         os.close(fd); raise ValueError('host PTY accessible')
 
+def host_ptys_denied(own, frozen, listing=None):
+    """GB4b (F-GB-PTS4, SB3E-R108.3): every PTY of the visible devpts that is not one of this probe's own must
+    refuse to open, and so must the frozen qualification canary path. An own PTY is known by its inode identity
+    (device, inode, device number) from the probe's own descriptors, never by its name or number."""
+    mine = {(i.st_dev,i.st_ino,i.st_rdev) for i in map(os.fstat,own)}
+    names = os.listdir('/dev/pts') if listing is None else listing
+    checked = 0
+    for path in sorted({frozen}|{'/dev/pts/'+n for n in names if n.isdecimal()}):
+        try: info = os.stat(path,follow_symlinks=False)
+        except FileNotFoundError: info = None
+        if info is not None and (info.st_dev,info.st_ino,info.st_rdev) in mine: continue
+        host_pty_denied(path); checked += 1
+    return checked
+
 def processes(context):
     pairs = [pty.openpty(),pty.openpty()]
     try:
@@ -300,7 +314,7 @@ def processes(context):
             try: fcntl.ioctl(slave,termios.TIOCSTI,b'x')
             except OSError as exc: require(exc.errno in (errno.EPERM,errno.EIO),'unexpected TIOCSTI error')
             else: raise ValueError('TIOCSTI injection allowed')
-        host_pty_denied(context['pty']['path'])
+        host_ptys_denied([slave for _,slave in pairs],context['pty']['path'])
     finally:
         for pair in pairs:
             for fd in pair: os.close(fd)
@@ -416,14 +430,19 @@ def validate_sensor(row,value):
                 and set(calls.get('inner',{}).values())=={'ENOSYS'}
                 and calls.get('non_native_abi') in ('SIGSYS','EPERM'),'syscall observations')
 
+def staged(stage,call,*args):
+    """GB4b (SB3E-R108.2): a sensor failure names its stage; init publishes it as one bounded record."""
+    try: return call(*args)
+    except Exception as exc: raise ValueError('PROBE '+stage+': '+type(exc).__name__+': '+str(exc)) from exc
+
 def payload(private_fds=()):
     context = json.loads(Path('/gate/policy/probe-context.json').read_bytes())
     script = 'import errno,os,sys\nfor fd in map(int,sys.argv[1:]):\n try: os.fstat(fd)\n except OSError as e: assert e.errno==errno.EBADF\n else: raise RuntimeError("private fd inherited")\ntry: os.listdir("/proc/1/fd")\nexcept PermissionError: pass\nelse: raise RuntimeError("init descriptors accessible")'
-    capture(['/usr/bin/python3','-I','-c',script,*map(str,private_fds)])
-    result = {'A1':isolation(context),'A6':processes(context),'A8':network(context)}
-    result['A5'] = chrome_observation(); result['A5']['private_desktop'] = desktop()
-    for row,value in result.items(): validate_sensor(row,value)
-    versions = {name:capture(argv).strip() for name,argv in {'python':['/usr/bin/python3','--version'],
+    staged('private-fds',capture,['/usr/bin/python3','-I','-c',script,*map(str,private_fds)])
+    result = {'A1':staged('A1',isolation,context),'A6':staged('A6',processes,context),'A8':staged('A8',network,context)}
+    result['A5'] = staged('A5',chrome_observation); result['A5']['private_desktop'] = staged('A5-desktop',desktop)
+    for row,value in result.items(): staged(row+'-sensor',validate_sensor,row,value)
+    versions = {name:staged('version-'+name,capture,argv).strip() for name,argv in {'python':['/usr/bin/python3','--version'],
                 'rust':['/opt/rust/bin/rustc','--version'],'cargo':['/opt/rust/bin/cargo','--version'],
                 'chrome':['/opt/google/chrome/chrome','--version']}.items()}
     return result,dict(versions,kernel=platform.release())

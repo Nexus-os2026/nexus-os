@@ -28,7 +28,7 @@ GATE_SETS = {
     'full': dict(policy='gates.json',status='PASS_SCOPED',request=('repo_id','full_sha','gate_set_id'),extra=(),cwd={}),
     'route-cells': dict(policy='route-cells.json',status='PASS_ROUTE_CELLS',
                         request=('repo_id','full_sha','gate_set_id','inventory_sha256','route_pins_sha256'),extra=('lane',),
-                        cwd={'route_a1':'/work/src','a7':'/work/src','route-cells':'/work/src/mother/host'})}
+                        cwd={'route_a1':'/work/src','a7':'/work/src','route_shim':'/work/src','route-cells':'/work/src/mother/host'})}
 UNFINISHED = ('FAILED','BLOCKED','INTERRUPTED')
 GATE_POLICY = ('policy/exclusions.json','policy/gates.json','policy/route-cells.json')
 HISTORY, HISTORY_OWNER = Path('/etc/gatebox/history'), 0
@@ -40,7 +40,10 @@ LANE = {'a7','verdict_sha256','evidence','rustc_vv','cargo_v','lockfile_sha256',
 ROUTE_SCHEMAS = {
     1: dict(request=GATE_SETS['route-cells']['request'][:4],gates=['a7','route-cells'],lane=LANE),
     2: dict(request=GATE_SETS['route-cells']['request'],gates=['route_a1','a7','route-cells'],
-            lane=LANE|{'route_a1','route_a1_sha256','route_pins_sha256'})}
+            lane=LANE|{'route_a1','route_a1_sha256','route_pins_sha256'}),
+    # GB4b (SB3E-R19 B1, R32.1): version 3 adds the init-built shim witness: its gate and the lane's `shims`.
+    3: dict(request=GATE_SETS['route-cells']['request'],gates=['route_a1','a7','route_shim','route-cells'],
+            lane=LANE|{'route_a1','route_a1_sha256','route_pins_sha256','shims'})}
 
 def unique(pairs):
     result = {}
@@ -331,7 +334,12 @@ def validate_route(summary, policies):
     for command in commands: completed(command,logs)
     if commands[-1].get('inventory') != dict(expected=names,executed=names,passed=names,failed=[],ignored=[],filtered=[]):
         raise ValueError('route test inventory')
-    if version == 2:  # GB3: route A1 passed on its own log, and the pins commitment is the request's
+    if version == 3:  # GB4b: every policy witness file is a published log, and the lane names exactly its digest
+        files, shims = route['witness']['files'], lane['shims']
+        if (not string_list(files) or not files or not isinstance(shims,dict) or set(shims) != set(files)
+                or any(not isinstance(h,str) or not HEX.fullmatch(h) or logs.get('witness-'+n+'.log') != h for n,h in shims.items())):
+            raise ValueError('route shim witness')
+    if version >= 2:  # GB3: route A1 passed on its own log, and the pins commitment is the request's
         if lane['route_a1'] != 'PASS': raise ValueError('route A1 verdict')
         if lane['route_a1_sha256'] != commands[0]['log_sha256']: raise ValueError('route A1 log')
         if lane['route_pins_sha256'] != request['route_pins_sha256']: raise ValueError('route pins commitment')
