@@ -489,11 +489,15 @@ class Watchdog:
         if self.tripped is None and (self.died is not None or not self.thread.is_alive()):
             raise WatchdogDied(self.died)
 
+    def sample(self):
+        mem, swap = self.read()
+        if mem < 6 * 1024 * 1024 or swap > 1024 * 1024:
+            self.tripped = {"mem_available_kb": mem, "swap_in_delta_kb": swap}
+        return self.tripped is not None
+
     def watch(self):
         while not self.stop.wait(self.interval):
-            mem, swap = self.read()
-            if mem < 6 * 1024 * 1024 or swap > 1024 * 1024:
-                self.tripped = {"mem_available_kb": mem, "swap_in_delta_kb": swap}
+            if self.sample():
                 for conn in list(self.conns):
                     try:
                         conn.sock.shutdown(2)
@@ -508,6 +512,9 @@ class Watchdog:
     def __exit__(self, *exc):
         self.stop.set()
         self.thread.join()
+        # SB3E-R263 F1: one last read on the same baseline, so growth inside the final interval still trips.
+        if self.tripped is None and self.died is None:
+            self.sample()
 
 
 def wait_quiet(swap_start):

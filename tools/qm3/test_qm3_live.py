@@ -511,10 +511,11 @@ class PerCall(unittest.TestCase):
     """SB3E-R196.3: steps/ mode (R191) and the per-call swap-in baseline (R192), through measure() and run_case()
     with every external stubbed: no network, no subprocess, no replay binary."""
 
-    def live(self, at=None):
+    def live(self, at=None, interval=0.01):
         """measure() over two one-call cases. `at` adds swap-in pages once call 1 is sent: "between" (after its
         reply), then in call 2 "quiet" (inside quiet()), "runtime" (after quiet, before the watchdog) and "send"
-        (as the request starts; the stub then waits for the watchdog to shut its connection)."""
+        (as the request starts; the stub then waits for the watchdog to shut its connection) or "last" (as the
+        request starts, and it returns at once)."""
         self.pages, self.sent, self.quiets, self.dogs, at = 1000, 0, [], [], dict(at or {})
         tripped, real_quiet, real_open = threading.Event(), q.quiet, open
 
@@ -526,6 +527,7 @@ class PerCall(unittest.TestCase):
                 bump("quiet")
                 return 200, b'{"models":[]}'
             self.assertEqual(path, "/api/chat")
+            bump("last")
             if "send" in at and self.sent == 1:
                 conns.append(types.SimpleNamespace(sock=types.SimpleNamespace(shutdown=lambda how: tripped.set())))
                 bump("send")
@@ -553,7 +555,7 @@ class PerCall(unittest.TestCase):
 
         class Dog(q.Watchdog):
             def __init__(dog, start):
-                super().__init__(start, interval=0.01)
+                super().__init__(start, interval=interval)
                 dog.start = start
                 self.dogs.append(dog)
 
@@ -603,6 +605,13 @@ class PerCall(unittest.TestCase):
         self.assertEqual(self.dogs[-1].tripped["swap_in_delta_kb"], 2 * half * 4)
         self.assertEqual([d.start for d in self.dogs], [1000, 1000 + GIB // 4])
         self.assertEqual([d.start for d in self.dogs], [start for start, _ in self.quiets[1:]])
+
+    def test_swap_in_inside_the_last_watchdog_interval_still_trips(self):
+        # SB3E-R263 F1: the watchdog takes no sample of its own here (60 s interval); the read at its stop sees it.
+        out = self.live({"between": GIB // 4, "last": GIB + 1}, interval=60)
+        self.assertEqual(out["abort"], {"code": "memory_watchdog", "case": "QM-N2", "call": 1})
+        self.assertEqual(self.dogs[-1].tripped["swap_in_delta_kb"], 1024 * 1024 + 4)
+        self.assertIsNone(self.live({"between": GIB // 4, "last": GIB}, interval=60)["abort"], "exactly 1 GiB")
 
 
 class NetworkAllowlist(unittest.TestCase):
