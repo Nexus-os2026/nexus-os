@@ -73,9 +73,9 @@ fn route_rf_changed_file() {
         let carried = reader::read_env(root);
         let library = carried.iter().find(|e| e.0 == "LD_PRELOAD").unwrap();
         let copy = root.join("changed.so");
-        std::fs::copy(&library.1, &copy).unwrap();
+        let mut bytes = std::fs::read(&library.1).unwrap();
+        std::fs::write(&copy, &bytes).unwrap();
         let env = reader::read_carried(root, copy.clone());
-        let mut bytes = std::fs::read(&copy).unwrap();
         bytes.push(0);
         std::fs::write(&copy, bytes).unwrap();
         env
