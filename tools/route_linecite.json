@@ -1,0 +1,104 @@
+{
+ "about": [
+  "SB-3E GB4b-B line-cite anchors (tools/route_linecite.py --write; SB3E-R248, R257 F5): cited file -> plant ->",
+  "citation -> the text from the cited column to the end of the cited line, with the plant's own mutation applied."
+ ],
+ "anchors": {
+  "crates/nexus-governed-control/src/authority/run.rs": {
+   "l_s4_panic_not_caught": {
+    "authority/run.rs:2038:9": "panic!(\"route seam S4: run table poisoned\");"
+   }
+  },
+  "mother/host/tests/route_cells/locks.rs": {
+   "l_s4_poisons_nothing": {
+    "route_cells/locks.rs:75:9": "assert_eq!(poisoned(f, RouteLock::EvidenceInner), row);"
+   },
+   "l_s4_store_helper_wrong_lock": {
+    "route_cells/locks.rs:75:9": "assert_eq!(poisoned(f, RouteLock::EvidenceInner), row);"
+   },
+   "l_s4_wrong_lock": {
+    "route_cells/locks.rs:132:9": "assert_eq!(poisoned(f, RouteLock::Actions), row);"
+   }
+  },
+  "mother/host/tests/route_cells/s5.rs": {
+   "l_s4b_applied_after_the_lock_is_taken": {
+    "route_cells/s5.rs:1084:13": "assert_eq!(format!(\"{advanced:?}\"), \"Err(Poisoned)\");"
+   },
+   "l_s4b_poisons_nothing": {
+    "route_cells/s5.rs:1084:13": "assert_eq!(format!(\"{advanced:?}\"), \"Err(Poisoned)\");"
+   },
+   "l_s5_admit_widened_to_charged": {
+    "route_cells/s5.rs:638:68": "unwrap();"
+   },
+   "l_s5_recording_lane_records_nothing": {
+    "route_cells/s5.rs:1024:13": "assert_eq!(entry.invocation, recorded.last().map(|r| r.1));"
+   },
+   "l_s5_session_from_no_context": {
+    "route_cells/s5.rs:638:68": "unwrap();"
+   },
+   "l_s5_wrong_invocation": {
+    "route_cells/s5.rs:638:68": "unwrap();"
+   }
+  },
+  "mother/host/tests/route_cells/store.rs": {
+   "l_b1_child_witness_skipped": {
+    "route_cells/store.rs:70:5": "assert!("
+   },
+   "l_b1_parent_hashes_another_file": {
+    "route_cells/store.rs:62:5": "assert_eq!(std::env::var(SHIM_SHA256).ok(), Some(hex.clone()));"
+   },
+   "l_error_note_removed": {
+    "route_cells/store.rs:355:5": "assert_eq!(r.consumed(f), Ok(()));",
+    "route_cells/store.rs:460:13": "assert_eq!(r.consumed(f), Ok(()));"
+   },
+   "l_h_commit_hold_any_kind": {
+    "route_cells/store.rs:499:17": "assert_eq!("
+   },
+   "l_h_owed_flush_ignored": {
+    "route_cells/store.rs:508:13": "assert_eq!(commits(&drain_trace()), [record(flush), record(ordinary)]);"
+   },
+   "l_s2_branch_never_matches": {
+    "route_cells/store.rs:402:9": "assert_eq!(",
+    "route_cells/store.rs:432:13": "assert_eq!(r.out, EndStatus::Owed);"
+   },
+   "l_s2_kind_check_removed": {
+    "route_cells/store.rs:480:17": "assert_eq!(owed, (EndStatus::Owed, (false, 1)));"
+   },
+   "l_s2_not_one_shot": {
+    "route_cells/store.rs:434:13": "assert!(matches!("
+   },
+   "l_s2_phase_match_removed": {
+    "route_cells/store.rs:396:13": "assert!(matches!(r.out.record(), EndStatus::Recorded { .. }));"
+   },
+   "l_s2_record_match_removed": {
+    "route_cells/store.rs:396:13": "assert!(matches!(r.out.record(), EndStatus::Recorded { .. }));"
+   },
+   "l_shim_armed_for_another_thread": {
+    "route_cells/store.rs:355:5": "assert_eq!(r.consumed(f), Ok(()));",
+    "route_cells/store.rs:456:13": "assert_eq!("
+   },
+   "l_shim_armed_for_the_database": {
+    "route_cells/store.rs:589:13": "assert!(log.contains(&fired), \"{log}\");",
+    "route_cells/store.rs:704:9": "assert_eq!(driver.join().unwrap(), EndStatus::Uncertain);"
+   },
+   "l_shim_fails_any_evidence_file": {
+    "route_cells/store.rs:34:5": "assert!(built.status.success(), \"the shim builds: {stderr}\");"
+   },
+   "l_shim_ignores_its_file_compiling": {
+    "route_cells/store.rs:662:13": "assert!("
+   },
+   "l_shim_ignores_its_file_masked_werror": {
+    "route_cells/store.rs:34:5": "assert!(built.status.success(), \"the shim builds: {stderr}\");"
+   },
+   "l_shim_ignores_its_thread_compiling": {
+    "route_cells/store.rs:632:13": "assert!(matches!(closed.1, EndStatus::Recorded { .. }));"
+   },
+   "l_shim_ignores_its_thread_masked_werror": {
+    "route_cells/store.rs:34:5": "assert!(built.status.success(), \"the shim builds: {stderr}\");"
+   },
+   "l_shim_not_one_shot": {
+    "route_cells/store.rs:708:9": "assert_eq!("
+   }
+  }
+ }
+}
