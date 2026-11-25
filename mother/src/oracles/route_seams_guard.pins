@@ -1085,18 +1085,21 @@ macro_rules! cells {
     (r0 registration_record ingress EOF; $($rest:tt)*) => { cell!(rc_r0_registration_record_ingress_eof, r0 registration_record ingress EOF, s5_reg::record_eof); cells! { $($rest)* } };
     (r0 registration_record ingress partial_Ctrl_D; $($rest:tt)*) => { cell!(rc_r0_registration_record_ingress_partial_ctrl_d, r0 registration_record ingress partial_Ctrl_D, s5_reg::record_partial_ctrl_d); cells! { $($rest)* } };
     (r0 registration_record ingress master_close; $($rest:tt)*) => { cell!(rc_r0_registration_record_ingress_master_close, r0 registration_record ingress master_close, s5_reg::record_master_close); cells! { $($rest)* } };
+    (r0 registration_record ingress read_failure; $($rest:tt)*) => { cell!(rc_r0_registration_record_ingress_read_failure, r0 registration_record ingress read_failure, s5_reg::record_read_failure); cells! { $($rest)* } };
     (r0 registration_reserve ingress CR; $($rest:tt)*) => { cell!(rc_r0_registration_reserve_ingress_cr, r0 registration_reserve ingress CR, s5_reg::reserve_cr); cells! { $($rest)* } };
     (r0 registration_reserve ingress LF; $($rest:tt)*) => { cell!(rc_r0_registration_reserve_ingress_lf, r0 registration_reserve ingress LF, s5_reg::reserve_lf); cells! { $($rest)* } };
     (r0 registration_reserve ingress CRLF; $($rest:tt)*) => { cell!(rc_r0_registration_reserve_ingress_crlf, r0 registration_reserve ingress CRLF, s5_reg::reserve_crlf); cells! { $($rest)* } };
     (r0 registration_reserve ingress EOF; $($rest:tt)*) => { cell!(rc_r0_registration_reserve_ingress_eof, r0 registration_reserve ingress EOF, s5_reg::reserve_eof); cells! { $($rest)* } };
     (r0 registration_reserve ingress partial_Ctrl_D; $($rest:tt)*) => { cell!(rc_r0_registration_reserve_ingress_partial_ctrl_d, r0 registration_reserve ingress partial_Ctrl_D, s5_reg::reserve_partial_ctrl_d); cells! { $($rest)* } };
     (r0 registration_reserve ingress master_close; $($rest:tt)*) => { cell!(rc_r0_registration_reserve_ingress_master_close, r0 registration_reserve ingress master_close, s5_reg::reserve_master_close); cells! { $($rest)* } };
+    (r0 registration_reserve ingress read_failure; $($rest:tt)*) => { cell!(rc_r0_registration_reserve_ingress_read_failure, r0 registration_reserve ingress read_failure, s5_reg::reserve_read_failure); cells! { $($rest)* } };
     (r0 registration_readiness ingress CR; $($rest:tt)*) => { cell!(rc_r0_registration_readiness_ingress_cr, r0 registration_readiness ingress CR, s5_reg::readiness_cr); cells! { $($rest)* } };
     (r0 registration_readiness ingress LF; $($rest:tt)*) => { cell!(rc_r0_registration_readiness_ingress_lf, r0 registration_readiness ingress LF, s5_reg::readiness_lf); cells! { $($rest)* } };
     (r0 registration_readiness ingress CRLF; $($rest:tt)*) => { cell!(rc_r0_registration_readiness_ingress_crlf, r0 registration_readiness ingress CRLF, s5_reg::readiness_crlf); cells! { $($rest)* } };
     (r0 registration_readiness ingress EOF; $($rest:tt)*) => { cell!(rc_r0_registration_readiness_ingress_eof, r0 registration_readiness ingress EOF, s5_reg::readiness_eof); cells! { $($rest)* } };
     (r0 registration_readiness ingress partial_Ctrl_D; $($rest:tt)*) => { cell!(rc_r0_registration_readiness_ingress_partial_ctrl_d, r0 registration_readiness ingress partial_Ctrl_D, s5_reg::readiness_partial_ctrl_d); cells! { $($rest)* } };
     (r0 registration_readiness ingress master_close; $($rest:tt)*) => { cell!(rc_r0_registration_readiness_ingress_master_close, r0 registration_readiness ingress master_close, s5_reg::readiness_master_close); cells! { $($rest)* } };
+    (r0 registration_readiness ingress read_failure; $($rest:tt)*) => { cell!(rc_r0_registration_readiness_ingress_read_failure, r0 registration_readiness ingress read_failure, s5_reg::readiness_read_failure); cells! { $($rest)* } };
     (r9 close_report lifecycle SealedFinalizing; $($rest:tt)*) => { cell!(rc_r9_close_report_lifecycle_sealedfinalizing, r9 close_report lifecycle SealedFinalizing, s5_report::sealedfinalizing); cells! { $($rest)* } };
     (r9 close_report lifecycle ClosingRestricted; $($rest:tt)*) => { cell!(rc_r9_close_report_lifecycle_closingrestricted, r9 close_report lifecycle ClosingRestricted, s5_report::closingrestricted); cells! { $($rest)* } };
     (r9 close_report fault none; $($rest:tt)*) => { cell!(rc_r9_close_report_fault_none, r9 close_report fault none, s5_report::fault_none); cells! { $($rest)* } };
@@ -1108,6 +1111,7 @@ macro_rules! cells {
     (r0 registration_install ingress EOF; $($rest:tt)*) => { cell!(rc_r0_registration_install_ingress_eof, r0 registration_install ingress EOF, s5_reg::install_eof); cells! { $($rest)* } };
     (r0 registration_install ingress partial_Ctrl_D; $($rest:tt)*) => { cell!(rc_r0_registration_install_ingress_partial_ctrl_d, r0 registration_install ingress partial_Ctrl_D, s5_reg::install_partial_ctrl_d); cells! { $($rest)* } };
     (r0 registration_install ingress master_close; $($rest:tt)*) => { cell!(rc_r0_registration_install_ingress_master_close, r0 registration_install ingress master_close, s5_reg::install_master_close); cells! { $($rest)* } };
+    (r0 registration_install ingress read_failure; $($rest:tt)*) => { cell!(rc_r0_registration_install_ingress_read_failure, r0 registration_install ingress read_failure, s5_reg::install_read_failure); cells! { $($rest)* } };
     (r0 registration_install ingress repeated; $($rest:tt)*) => { cell!(rc_r0_registration_install_ingress_repeated, r0 registration_install ingress repeated, s5_reg::install_repeated); cells! { $($rest)* } };
     (r0 registration_install ingress quit; $($rest:tt)*) => { cell!(rc_r0_registration_install_ingress_quit, r0 registration_install ingress quit, s5_reg::install_quit); cells! { $($rest)* } };
     (r0 registration_install lifecycle Emergency; $($rest:tt)*) => { cell!(rc_r0_registration_install_lifecycle_emergency, r0 registration_install lifecycle Emergency, s5_reg::install_emergency); cells! { $($rest)* } };
@@ -1120,6 +1124,7 @@ macro_rules! cells {
     (r5 registration_version ingress EOF; $($rest:tt)*) => { cell!(rc_r5_registration_version_ingress_eof, r5 registration_version ingress EOF, s5_reg::version_eof); cells! { $($rest)* } };
     (r5 registration_version ingress partial_Ctrl_D; $($rest:tt)*) => { cell!(rc_r5_registration_version_ingress_partial_ctrl_d, r5 registration_version ingress partial_Ctrl_D, s5_reg::version_partial_ctrl_d); cells! { $($rest)* } };
     (r5 registration_version ingress master_close; $($rest:tt)*) => { cell!(rc_r5_registration_version_ingress_master_close, r5 registration_version ingress master_close, s5_reg::version_master_close); cells! { $($rest)* } };
+    (r5 registration_version ingress read_failure; $($rest:tt)*) => { cell!(rc_r5_registration_version_ingress_read_failure, r5 registration_version ingress read_failure, s5_reg::version_read_failure); cells! { $($rest)* } };
     (r5 registration_version ingress repeated; $($rest:tt)*) => { cell!(rc_r5_registration_version_ingress_repeated, r5 registration_version ingress repeated, s5_reg::version_repeated); cells! { $($rest)* } };
     (r5 registration_version ingress quit; $($rest:tt)*) => { cell!(rc_r5_registration_version_ingress_quit, r5 registration_version ingress quit, s5_reg::version_quit); cells! { $($rest)* } };
     (r5 registration_status ingress CR; $($rest:tt)*) => { cell!(rc_r5_registration_status_ingress_cr, r5 registration_status ingress CR, s5_reg::status_cr); cells! { $($rest)* } };
@@ -1128,6 +1133,7 @@ macro_rules! cells {
     (r5 registration_status ingress EOF; $($rest:tt)*) => { cell!(rc_r5_registration_status_ingress_eof, r5 registration_status ingress EOF, s5_reg::status_eof); cells! { $($rest)* } };
     (r5 registration_status ingress partial_Ctrl_D; $($rest:tt)*) => { cell!(rc_r5_registration_status_ingress_partial_ctrl_d, r5 registration_status ingress partial_Ctrl_D, s5_reg::status_partial_ctrl_d); cells! { $($rest)* } };
     (r5 registration_status ingress master_close; $($rest:tt)*) => { cell!(rc_r5_registration_status_ingress_master_close, r5 registration_status ingress master_close, s5_reg::status_master_close); cells! { $($rest)* } };
+    (r5 registration_status ingress read_failure; $($rest:tt)*) => { cell!(rc_r5_registration_status_ingress_read_failure, r5 registration_status ingress read_failure, s5_reg::status_read_failure); cells! { $($rest)* } };
     (r5 registration_status ingress repeated; $($rest:tt)*) => { cell!(rc_r5_registration_status_ingress_repeated, r5 registration_status ingress repeated, s5_reg::status_repeated); cells! { $($rest)* } };
     (r5 registration_status ingress quit; $($rest:tt)*) => { cell!(rc_r5_registration_status_ingress_quit, r5 registration_status ingress quit, s5_reg::status_quit); cells! { $($rest)* } };
     (r5 registration_tags ingress CR; $($rest:tt)*) => { cell!(rc_r5_registration_tags_ingress_cr, r5 registration_tags ingress CR, s5_reg::tags_cr); cells! { $($rest)* } };
@@ -1136,6 +1142,7 @@ macro_rules! cells {
     (r5 registration_tags ingress EOF; $($rest:tt)*) => { cell!(rc_r5_registration_tags_ingress_eof, r5 registration_tags ingress EOF, s5_reg::tags_eof); cells! { $($rest)* } };
     (r5 registration_tags ingress partial_Ctrl_D; $($rest:tt)*) => { cell!(rc_r5_registration_tags_ingress_partial_ctrl_d, r5 registration_tags ingress partial_Ctrl_D, s5_reg::tags_partial_ctrl_d); cells! { $($rest)* } };
     (r5 registration_tags ingress master_close; $($rest:tt)*) => { cell!(rc_r5_registration_tags_ingress_master_close, r5 registration_tags ingress master_close, s5_reg::tags_master_close); cells! { $($rest)* } };
+    (r5 registration_tags ingress read_failure; $($rest:tt)*) => { cell!(rc_r5_registration_tags_ingress_read_failure, r5 registration_tags ingress read_failure, s5_reg::tags_read_failure); cells! { $($rest)* } };
     (r5 registration_tags ingress repeated; $($rest:tt)*) => { cell!(rc_r5_registration_tags_ingress_repeated, r5 registration_tags ingress repeated, s5_reg::tags_repeated); cells! { $($rest)* } };
     (r5 registration_tags ingress quit; $($rest:tt)*) => { cell!(rc_r5_registration_tags_ingress_quit, r5 registration_tags ingress quit, s5_reg::tags_quit); cells! { $($rest)* } };
     (r5 registration_show ingress CR; $($rest:tt)*) => { cell!(rc_r5_registration_show_ingress_cr, r5 registration_show ingress CR, s5_reg::show_cr); cells! { $($rest)* } };
@@ -1144,6 +1151,7 @@ macro_rules! cells {
     (r5 registration_show ingress EOF; $($rest:tt)*) => { cell!(rc_r5_registration_show_ingress_eof, r5 registration_show ingress EOF, s5_reg::show_eof); cells! { $($rest)* } };
     (r5 registration_show ingress partial_Ctrl_D; $($rest:tt)*) => { cell!(rc_r5_registration_show_ingress_partial_ctrl_d, r5 registration_show ingress partial_Ctrl_D, s5_reg::show_partial_ctrl_d); cells! { $($rest)* } };
     (r5 registration_show ingress master_close; $($rest:tt)*) => { cell!(rc_r5_registration_show_ingress_master_close, r5 registration_show ingress master_close, s5_reg::show_master_close); cells! { $($rest)* } };
+    (r5 registration_show ingress read_failure; $($rest:tt)*) => { cell!(rc_r5_registration_show_ingress_read_failure, r5 registration_show ingress read_failure, s5_reg::show_read_failure); cells! { $($rest)* } };
     (r5 registration_show ingress repeated; $($rest:tt)*) => { cell!(rc_r5_registration_show_ingress_repeated, r5 registration_show ingress repeated, s5_reg::show_repeated); cells! { $($rest)* } };
     (r5 registration_show ingress quit; $($rest:tt)*) => { cell!(rc_r5_registration_show_ingress_quit, r5 registration_show ingress quit, s5_reg::show_quit); cells! { $($rest)* } };
     (r5 call_version ingress CR; $($rest:tt)*) => { cell!(rc_r5_call_version_ingress_cr, r5 call_version ingress CR, s5_call_b::version_cr); cells! { $($rest)* } };
@@ -1188,6 +1196,7 @@ macro_rules! cells {
     (r6 cancel_run ingress EOF; $($rest:tt)*) => { cell!(rc_r6_cancel_run_ingress_eof, r6 cancel_run ingress EOF, s5_door::cancel_eof); cells! { $($rest)* } };
     (r6 cancel_run ingress partial_Ctrl_D; $($rest:tt)*) => { cell!(rc_r6_cancel_run_ingress_partial_ctrl_d, r6 cancel_run ingress partial_Ctrl_D, s5_door::cancel_partial_ctrl_d); cells! { $($rest)* } };
     (r6 cancel_run ingress master_close; $($rest:tt)*) => { cell!(rc_r6_cancel_run_ingress_master_close, r6 cancel_run ingress master_close, s5_door::cancel_master_close); cells! { $($rest)* } };
+    (r6 cancel_run ingress read_failure; $($rest:tt)*) => { cell!(rc_r6_cancel_run_ingress_read_failure, r6 cancel_run ingress read_failure, s5_door::cancel_read_failure); cells! { $($rest)* } };
     (r6 cancel_run ingress repeated; $($rest:tt)*) => { cell!(rc_r6_cancel_run_ingress_repeated, r6 cancel_run ingress repeated, s5_door::cancel_repeated); cells! { $($rest)* } };
     (r6 cancel_run ingress quit; $($rest:tt)*) => { cell!(rc_r6_cancel_run_ingress_quit, r6 cancel_run ingress quit, s5_door::cancel_quit); cells! { $($rest)* } };
     (r6 cancel_run lifecycle Emergency; $($rest:tt)*) => { cell!(rc_r6_cancel_run_lifecycle_emergency, r6 cancel_run lifecycle Emergency, s5_door::cancel_emergency); cells! { $($rest)* } };
@@ -1222,6 +1231,7 @@ macro_rules! cells {
     (r8 lane_result_admission ingress EOF; $($rest:tt)*) => { cell!(rc_r8_lane_result_admission_ingress_eof, r8 lane_result_admission ingress EOF, s5_r8::lane_eof); cells! { $($rest)* } };
     (r8 lane_result_admission ingress partial_Ctrl_D; $($rest:tt)*) => { cell!(rc_r8_lane_result_admission_ingress_partial_ctrl_d, r8 lane_result_admission ingress partial_Ctrl_D, s5_r8::lane_partial_ctrl_d); cells! { $($rest)* } };
     (r8 lane_result_admission ingress master_close; $($rest:tt)*) => { cell!(rc_r8_lane_result_admission_ingress_master_close, r8 lane_result_admission ingress master_close, s5_r8::lane_master_close); cells! { $($rest)* } };
+    (r8 lane_result_admission ingress read_failure; $($rest:tt)*) => { cell!(rc_r8_lane_result_admission_ingress_read_failure, r8 lane_result_admission ingress read_failure, s5_r8::lane_read_failure); cells! { $($rest)* } };
     (r8 lane_result_admission ingress repeated; $($rest:tt)*) => { cell!(rc_r8_lane_result_admission_ingress_repeated, r8 lane_result_admission ingress repeated, s5_r8::lane_repeated); cells! { $($rest)* } };
     (r8 lane_result_admission ingress quit; $($rest:tt)*) => { cell!(rc_r8_lane_result_admission_ingress_quit, r8 lane_result_admission ingress quit, s5_r8::lane_quit); cells! { $($rest)* } };
     (r8 lane_result_admission lifecycle Emergency; $($rest:tt)*) => { cell!(rc_r8_lane_result_admission_lifecycle_emergency, r8 lane_result_admission lifecycle Emergency, s5_r8::lane_emergency); cells! { $($rest)* } };

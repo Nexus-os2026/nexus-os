@@ -162,13 +162,14 @@ cells.rs 1d88c33c5826d8ef98f3eae9640938b71fe31771c99c537288a414b7ee2a80fa
 grant.rs fbe4c4b9dc43dc86c77ed4ec9c09f8bf9ea61dc8091b8ed1866a847a99e27be4
 locks.rs 9b82f75d8ad4f2d0c47194c69be15187dd3f96291033b3a57a4105bc731ccf78
 main.rs a3a45aaf2ed1ba382f418a7b2ba4b6bbf15d2c50dbc67a42ab18c81447e4ff76
-reader.rs f0e072b6911653d806059786c6b9c822a908d0b6dbdad832c03ffbec4c7fe66b
+reader.rs 85762729304983f719c14f25b1f0366953861bdd9275a70c618fbbf1d9755c3f
+rf_controls.rs 777013f4767902daabd00a5d0ae1e8830649b493a740eed70799579cc9ef0b15
 route_read.c 05fa04a9a933dacf5c4d4a93776e695da0c885dfebba857751f16cb7f14c6b4b
 route_fsync.c 6166fe8b9eee2e9c2a84a8bcbfcc1590f14de97d7bb0d60084da674a56f0e973
 s5.rs f2ba2a7c61c07224825eec9b43c6ba965fe30671c62b32a56f22e531dff0d32e
 s5_close.rs 6127e5b54a2032998559214f4ef6efb8f7d9d765d6c55097367a386423434a0a
-s5_door.rs 323413cba0602e50146257de8146f162322a8678e97e80e932a06656864a8f5c
-s5_reg.rs 14561ee08b9feb518d8d61901f075c2f80b2dd7af465a09c6537ef055f4009a0
+s5_door.rs aa309f62fcd47330501a7878bc0fcad754af8df6fcd6a2adff95f6a791a15bf9
+s5_reg.rs 99a6eee2276221107b96fb794b290bdeb1183c21a9d054fd5ecd214206e28df2
 s5_call_b.rs 2d7e695e5e214bf07d644db6c525b7216003e31e73d26ba6871fed0894f4e271
 s5_ident.rs d03394ae144134d8d2a9b6b8d9838abad3ad971488144593e6b1f64db6db13c6
 s5_r6.rs 42217130763f956fa59dbc92830b833a9321ca1cbfd55b269fe3d82211f2efea
@@ -212,6 +213,7 @@ const NON_SECTIONS: [&str; 11] = [
     "main.rs",
     "reader.rs",
     "report.rs",
+    "rf_controls.rs",
     "route_fsync.c",
     "route_read.c",
     "sched.rs",
@@ -299,6 +301,7 @@ modgrant;\n\
 modlocks;\n\
 modreader;\n\
 modreport;\n\
+modrf_controls;\n\
 mods5;\n\
 mods5_call_b;\n\
 mods5_close;\n\
@@ -3142,8 +3145,10 @@ s|enum Hold
 h|const BROKER_SINKS
 h|const CLOSE_SINKS
 h|const HELD_SINKS
-h|struct Ran{id,nonce,result,passed,output}
+h|struct Ran{id,nonce,result,passed,output,shim}
 h|fn cell
+h|type Carrier
+h|fn cell_with
 s|fn mission
 s|fn hold
 s|enum Anchor

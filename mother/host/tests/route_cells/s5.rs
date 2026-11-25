@@ -1422,6 +1422,9 @@ pub(super) struct Ran {
     pub(super) result: String,
     pub(super) passed: bool,
     pub(super) output: String,
+    /// CELL-RF-10 (SB3E-R32.1 B1): the read shim's digest as the parent took
+    /// it, only if the child witnessed exactly it (`reader::shim_parent`).
+    pub(super) shim: Option<String>,
 }
 
 /// The cell runner (design 3.3). In the parent: a fresh nonce by env and one
@@ -1434,7 +1437,29 @@ pub(super) fn cell(
     drive: fn(&Fixture) -> Facts,
     render: fn(&Facts) -> String,
 ) -> Option<Ran> {
+    // CELL-RF-10: a `read_failure` cell's child carries the read shim. A cell
+    // that is not given it is refused by `witness::credited` (no witness).
+    let carrier: Carrier = match id.ends_with("_read_failure") {
+        true => reader::read_env,
+        false => |_| Vec::new(),
+    };
+    cell_with(name, id, drive, render, carrier)
+}
+/// CELL-RF-10 (SB3E-R32.1, R257): a cell child's extra environment, made by
+/// the parent in the child's owned root before the child starts.
+pub(super) type Carrier = fn(&std::path::Path) -> Vec<(&'static str, PathBuf)>;
+/// CELL-RF-10: `cell` with `carrier`'s variables in the child. The child
+/// checks the mapped library and its digest before it drives
+/// (`reader::shim_child`); the parent keeps the witnessed digest in `Ran`.
+pub(super) fn cell_with(
+    name: &str,
+    id: &'static str,
+    drive: fn(&Fixture) -> Facts,
+    render: fn(&Facts) -> String,
+    carrier: Carrier,
+) -> Option<Ran> {
     if let Some(root) = std::env::var_os(CHILD) {
+        reader::shim_child();
         let f = Fixture(PathBuf::from(root));
         *RUNNING.lock().unwrap() = id;
         let facts = drive(&f);
@@ -1454,7 +1479,9 @@ pub(super) fn cell(
     let mut random = std::fs::File::open("/dev/urandom").unwrap();
     std::io::Read::read_exact(&mut random, &mut bytes).unwrap();
     let nonce: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
-    let leaf = format!("sb3e-route-{}-cell-{id}", std::process::id());
+    // A cell's test is named by its id; a control of the same id has its own root.
+    let leaf = name.rsplit("::").next().unwrap_or(id);
+    let leaf = format!("sb3e-route-{}-cell-{leaf}", std::process::id());
     let root = std::env::temp_dir().join(leaf);
     std::fs::DirBuilder::new()
         .mode(0o700)
@@ -1464,9 +1491,15 @@ pub(super) fn cell(
     std::fs::File::create(root.0.join("result")).unwrap();
     let mut command = std::process::Command::new(std::env::current_exe().unwrap());
     command.args(["--exact", name, "--nocapture", "--test-threads=1"]);
-    let out = bounded(command.env(CHILD, &root.0).env(NONCE, &nonce));
+    let extra = carrier(&root.0);
+    command.env(CHILD, &root.0).env(NONCE, &nonce);
+    let out = bounded(command.envs(extra.iter().cloned()));
     let result = std::fs::read_to_string(root.0.join("result")).unwrap_or_default();
     let stdout = String::from_utf8_lossy(&out.stdout);
+    let shim = reader::shim_parent(&extra, &stdout);
+    if let Some(digest) = &shim {
+        println!("ROUTE SHIM SHA256 {digest}"); // The parent's record, as child_with's.
+    }
     let output = format!("{stdout}{}", String::from_utf8_lossy(&out.stderr));
     let passed = out.status.success();
     Some(Ran {
@@ -1475,6 +1508,7 @@ pub(super) fn cell(
         result,
         passed,
         output,
+        shim,
     })
 }
 
@@ -2874,6 +2908,10 @@ struct Reading {
     terminal: Terminal,
     tty: reader::Tty,
     clock: reader::Clock,
+    /// CELL-RF-10 (R267.1 F4): the session, and its state as `typed` left it
+    /// (after the reader's own acknowledgements, the cell's hold standing).
+    session: Arc<HostSession>,
+    left: Mutex<String>,
 }
 impl Reading {
     fn open(o: &Opened) -> Self {
@@ -2881,10 +2919,17 @@ impl Reading {
         let tty = reader::Tty::open();
         let terminal = Terminal::open(o.ingress.clone()).expect("Terminal::open on the pty");
         assert!(terminal.route_bind(o.session.clone()), "S6: binds once");
+        // CELL-RF-10 control only (rf_controls.rs): the read failure applied
+        // as the reader opens, before any point is held (the wrong read).
+        if std::env::var_os(reader::EARLY).is_some() {
+            drop(reader::write_value(&tty, &clock, "read_failure"));
+        }
         Reading {
             terminal,
             tty,
             clock,
+            session: o.session.clone(),
+            left: Mutex::new(String::new()),
         }
     }
     /// The value typed, each chunk behind its barrier; `since` taken first.
@@ -2892,6 +2937,7 @@ impl Reading {
         drop(s7::drain_trace());
         let (since, mark) = (Instant::now(), self.tty.len());
         let acks = reader::write_value(&self.tty, &self.clock, value);
+        *self.left.lock().unwrap() = format!("{:?}", self.session.state());
         (acks, since, mark)
     }
     /// The negative control: a public-ingress press, nothing typed (des:474).
@@ -2912,8 +2958,14 @@ impl Reading {
         let finished = finished || value == "master_close";
         self.tty.settle(&self.clock);
         let (echo, trace) = (self.tty.since(mark), s7::drain_trace());
+        let left = std::mem::take(&mut *self.left.lock().unwrap());
         drop(self);
         let mut findings = Vec::new();
+        // CELL-RF-10 (F4): the read error left the session Failed while held
+        // (terminal.rs `read_input`'s Err arm: press, then fail).
+        if value == "read_failure" && left != "Failed" {
+            findings.push(format!("read: state {left} after {value}, not Failed"));
+        }
         let read: Vec<&s7::Entry> = trace.iter().filter(|e| e.point == "host.read").collect();
         let barriers: Vec<&s7::Entry> = acks.iter().flatten().collect();
         if !finished || barriers.len() != acks.len() || barriers != read {

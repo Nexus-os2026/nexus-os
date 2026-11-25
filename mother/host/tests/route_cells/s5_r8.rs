@@ -7,7 +7,8 @@
 // result `Err(Invalidated)` bound, finding D) and record_first_classify
 // repeated (x:399), and the three controls. C1 names the advance's last step,
 // the mission's end and the Builder's own call result. Open for M-5b: the
-// byte rows x:366-368, 394-396 (finding C); for GB4b: x:322, 369, 397.
+// byte rows x:366-368, 394-396 (finding C); for GB4b: x:369, 397.
+// CELL-RF-10 (SB3E-R267): x:322, read_failure, in a child that carries the read shim.
 use super::{
     s5::{after_chat, d_lane, Facts},
     Fixture,
@@ -42,6 +43,10 @@ pub(super) fn lane_partial_ctrl_d(f: &Fixture) -> Facts {
 }
 pub(super) fn lane_master_close(f: &Fixture) -> Facts {
     d_lane(f, LANE, ("master_close", Some("master_close")), REFUSED)
+}
+/// CELL-RF-10 (x:322): the armed read shim fails the reader's read.
+pub(super) fn lane_read_failure(f: &Fixture) -> Facts {
+    d_lane(f, LANE, ("read_failure", Some("read_failure")), REFUSED)
 }
 pub(super) fn lane_repeated(f: &Fixture) -> Facts {
     d_lane(f, LANE, ("repeated", None), REFUSED)

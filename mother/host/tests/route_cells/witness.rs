@@ -1393,15 +1393,7 @@ fn control_in(r: &Ran, (sink, dim): (&str, &str), controls: &[(&str, &str, &'sta
 /// against its frozen row, field by field and byte for byte, then the
 /// child's own exit; every difference is named, the witness's first.
 pub(super) fn credited(r: &Ran, sink: &str, dim: &str, value: &str) {
-    let want = frozen(sink, dim, value);
-    let want = want.unwrap_or_else(|| panic!("{}: no row {sink}/{dim}/{value}", r.id));
-    let mut found = match written(r) {
-        Ok(witness) => compare(want, witness),
-        Err(e) => vec![e.to_string()],
-    };
-    if !r.passed {
-        found.push("record: the child failed".into());
-    }
+    let found = refusals(r, sink, dim, value);
     for line in r.output.lines().filter_map(|l| l.split_once("WITNESS ")) {
         println!("{}: {}", r.id, line.1); // Measured evidence (--nocapture).
     }
@@ -1414,6 +1406,56 @@ pub(super) fn credited(r: &Ran, sink: &str, dim: &str, value: &str) {
         shown.0,
         shown.1
     );
+}
+
+/// Every refusal `credited` names (CELL-RF-10: as a value, for the controls).
+/// SB3E-R267.1 F3 (R32.1 B1): a `read_failure` row is credited only from a
+/// child that witnessed the digest its parent took of the preloaded shim.
+pub(super) fn refusals(r: &Ran, sink: &str, dim: &str, value: &str) -> Vec<String> {
+    let want = frozen(sink, dim, value);
+    let want = want.unwrap_or_else(|| panic!("{}: no row {sink}/{dim}/{value}", r.id));
+    let mut found = match written(r) {
+        Ok(witness) => compare(want, witness),
+        Err(e) => vec![e.to_string()],
+    };
+    if !r.passed {
+        found.push("record: the child failed".into());
+    }
+    if value == "read_failure" && r.shim.is_none() {
+        found.push("record: no shim witness".into());
+    }
+    found
+}
+/// CELL-RF-10 (rule level, F3): a `read_failure` record equal to its frozen
+/// row is credited only with the shim witness; any other value needs none.
+#[test]
+fn witness_read_failure_credit_needs_the_shim_witness() {
+    let row = ("registration_record", "ingress");
+    let ran = |value: &str, shim: Option<&str>| {
+        let id = "rc_r0_registration_record_ingress_x";
+        let want = frozen(row.0, row.1, value).unwrap();
+        Ran {
+            id,
+            nonce: "n".into(),
+            result: format!("CELL n {id} {want}\n"),
+            passed: true,
+            output: String::new(),
+            shim: shim.map(str::to_string),
+        }
+    };
+    let found = refusals(&ran("read_failure", None), row.0, row.1, "read_failure");
+    let want = ["record: no shim witness"];
+    assert_eq!(found, want, "credited without the shim witness");
+    credited(
+        &ran("read_failure", Some("d")),
+        row.0,
+        row.1,
+        "read_failure",
+    );
+    credited(&ran("EOF", None), row.0, row.1, "EOF");
+    let bare = ran("read_failure", None);
+    let refused = std::panic::catch_unwind(|| credited(&bare, row.0, row.1, "read_failure"));
+    assert!(refused.is_err(), "credited without the shim witness");
 }
 
 /// Rows 93-96 and 98-100 (the `call_chat` ingress cells but the held row
@@ -1669,6 +1711,7 @@ fn witness_result_records_each_refused() {
         result: result.into(),
         passed: true,
         output: String::new(),
+        shim: None,
     };
     let good = "CELL n2 ctl_call_chat entry=x;check=y\n";
     assert_eq!(record(&ran(good)), Ok("entry=x;check=y"));

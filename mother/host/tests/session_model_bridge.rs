@@ -2133,7 +2133,7 @@ fn sb3d_r3_d1_cells_are_executed_or_owned() {
             count("open:M2e-D")
         ),
         (325, 0, 457, 1, 28),
-        "after D2, U5b's six, U9a's eleven, U6a-1's three, U9b's five, SEAM-1's seven, U19a's 40, U21a's five, U19b-1's 44, U19b-2's 36, U20b's 12, U19c's five, U20c's 31, SEAM-2's 30 and CELL-R-A's 45 credited cells: {summary:?}"
+        "after D2, U5b's six, U9a's eleven, U6a-1's three, U9b's five, SEAM-1's seven, U19a's 40, U21a's five, U19b-1's 44, U19b-2's 36, U20b's 12, U19c's five, U20c's 31, SEAM-2's 30, CELL-R-A's 45 and CELL-RF-10's ten credited cells: {summary:?}"
     );
     assert_eq!(
         count("cited"),
@@ -2159,7 +2159,10 @@ fn sb3d_r3_d1_cells_are_executed_or_owned() {
 /// SEAM-2 (SB3E-R242): six
 /// call_slot_reserve, six attempt_ticket, twelve charge_append and six
 /// meter_settle cells. CELL-R-A (SB3E-R265): 45 race A byte cells (docs 14.26).
-const CREDITED: [&str; 280] = [
+/// CELL-RF-10 (SB3E-R267): the ten reachable read_failure
+/// cells (cancel_run, lane_result_admission, four registration and four
+/// metadata-gate sinks).
+const CREDITED: [&str; 290] = [
     "r5/call_chat/ingress/original_cell_unscheduled",
     "r5/call_chat/ingress/repeated",
     "r5/call_chat/ingress/mission_stop",
@@ -2440,6 +2443,16 @@ const CREDITED: [&str; 280] = [
     "r8/record_first_classify/ingress/EOF",
     "r8/record_first_classify/ingress/partial_Ctrl_D",
     "r8/record_first_classify/ingress/master_close",
+    "r6/cancel_run/ingress/read_failure",
+    "r8/lane_result_admission/ingress/read_failure",
+    "r0/registration_install/ingress/read_failure",
+    "r0/registration_readiness/ingress/read_failure",
+    "r0/registration_record/ingress/read_failure",
+    "r0/registration_reserve/ingress/read_failure",
+    "r5/registration_show/ingress/read_failure",
+    "r5/registration_status/ingress/read_failure",
+    "r5/registration_tags/ingress/read_failure",
+    "r5/registration_version/ingress/read_failure",
 ];
 /// U5b: `manifest` with the six credited entries first, for a control whose
 /// register keeps the real one's six `x:rc_` cells (each control's own

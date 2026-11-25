@@ -12,6 +12,7 @@
 // R2 inference_binding cells (SB3E-R228), U20c's 17 R7 and 14 R8 cells
 // (SB3E-R243), SEAM-2's 30 R3 attempt and R4 meter cells (SB3E-R242) and
 // CELL-R-A's 45 race A byte cells under the Stop-first barrier (SB3E-R265).
+// CELL-RF-10's ten read_failure cells (SB3E-R267).
 // The route_cells lane compiles it through
 // `macro_rules! cells` in main.rs, whose terminal arm is the control
 // `ctl_call_chat`; session_model_bridge.rs and check-citations.py parse it
@@ -78,18 +79,21 @@ cells! {
     r0 registration_record ingress EOF;
     r0 registration_record ingress partial_Ctrl_D;
     r0 registration_record ingress master_close;
+    r0 registration_record ingress read_failure;
     r0 registration_reserve ingress CR;
     r0 registration_reserve ingress LF;
     r0 registration_reserve ingress CRLF;
     r0 registration_reserve ingress EOF;
     r0 registration_reserve ingress partial_Ctrl_D;
     r0 registration_reserve ingress master_close;
+    r0 registration_reserve ingress read_failure;
     r0 registration_readiness ingress CR;
     r0 registration_readiness ingress LF;
     r0 registration_readiness ingress CRLF;
     r0 registration_readiness ingress EOF;
     r0 registration_readiness ingress partial_Ctrl_D;
     r0 registration_readiness ingress master_close;
+    r0 registration_readiness ingress read_failure;
     r9 close_report lifecycle SealedFinalizing;
     r9 close_report lifecycle ClosingRestricted;
     r9 close_report fault none;
@@ -101,6 +105,7 @@ cells! {
     r0 registration_install ingress EOF;
     r0 registration_install ingress partial_Ctrl_D;
     r0 registration_install ingress master_close;
+    r0 registration_install ingress read_failure;
     r0 registration_install ingress repeated;
     r0 registration_install ingress quit;
     r0 registration_install lifecycle Emergency;
@@ -113,6 +118,7 @@ cells! {
     r5 registration_version ingress EOF;
     r5 registration_version ingress partial_Ctrl_D;
     r5 registration_version ingress master_close;
+    r5 registration_version ingress read_failure;
     r5 registration_version ingress repeated;
     r5 registration_version ingress quit;
     r5 registration_status ingress CR;
@@ -121,6 +127,7 @@ cells! {
     r5 registration_status ingress EOF;
     r5 registration_status ingress partial_Ctrl_D;
     r5 registration_status ingress master_close;
+    r5 registration_status ingress read_failure;
     r5 registration_status ingress repeated;
     r5 registration_status ingress quit;
     r5 registration_tags ingress CR;
@@ -129,6 +136,7 @@ cells! {
     r5 registration_tags ingress EOF;
     r5 registration_tags ingress partial_Ctrl_D;
     r5 registration_tags ingress master_close;
+    r5 registration_tags ingress read_failure;
     r5 registration_tags ingress repeated;
     r5 registration_tags ingress quit;
     r5 registration_show ingress CR;
@@ -137,6 +145,7 @@ cells! {
     r5 registration_show ingress EOF;
     r5 registration_show ingress partial_Ctrl_D;
     r5 registration_show ingress master_close;
+    r5 registration_show ingress read_failure;
     r5 registration_show ingress repeated;
     r5 registration_show ingress quit;
     r5 call_version ingress CR;
@@ -181,6 +190,7 @@ cells! {
     r6 cancel_run ingress EOF;
     r6 cancel_run ingress partial_Ctrl_D;
     r6 cancel_run ingress master_close;
+    r6 cancel_run ingress read_failure;
     r6 cancel_run ingress repeated;
     r6 cancel_run ingress quit;
     r6 cancel_run lifecycle Emergency;
@@ -215,6 +225,7 @@ cells! {
     r8 lane_result_admission ingress EOF;
     r8 lane_result_admission ingress partial_Ctrl_D;
     r8 lane_result_admission ingress master_close;
+    r8 lane_result_admission ingress read_failure;
     r8 lane_result_admission ingress repeated;
     r8 lane_result_admission ingress quit;
     r8 lane_result_admission lifecycle Emergency;

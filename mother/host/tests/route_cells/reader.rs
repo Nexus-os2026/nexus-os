@@ -448,26 +448,54 @@ fn value(f: &Fixture, value: &'static str, state: SessionState) {
     }
 }
 
-const ARM: &str = "ROUTE_READ_ARM";
+pub(super) const ARM: &str = "ROUTE_READ_ARM";
+/// CELL-RF-10 control only: `s5::Reading::open` applies the read failure early.
+pub(super) const EARLY: &str = "ROUTE_READ_EARLY";
 fn no_env(_: &Path) -> Vec<(&'static str, PathBuf)> {
     Vec::new()
 }
-/// Q7: the read shim, built per child as store.rs builds route_fsync.c, its
-/// digest witnessed by child_with (store::shim_witness, shim_witnessed).
-fn read_env(root: &Path) -> Vec<(&'static str, PathBuf)> {
-    use sha2::Digest;
-    let (source, library) = (root.join("route_read.c"), root.join("route_read.so"));
-    std::fs::write(&source, include_str!("route_read.c")).unwrap();
+/// Q7: the read shim, its digest witnessed by child_with (store::shim_witness,
+/// shim_witnessed) or by a cell's runner (`shim_child`, `shim_parent`).
+/// CELL-RF-10 (GB4b carrier, SB3E-R257): with `ROUTE_WITNESS_DIR` set the
+/// library is `$ROUTE_WITNESS_DIR/route_read.so`, only read here (never
+/// built, written or renamed); unset, it is built in the child's root.
+pub(super) fn read_env(root: &Path) -> Vec<(&'static str, PathBuf)> {
+    read_env_in(
+        root,
+        std::env::var_os("ROUTE_WITNESS_DIR").map(PathBuf::from),
+    )
+}
+fn read_env_in(root: &Path, witness: Option<PathBuf>) -> Vec<(&'static str, PathBuf)> {
+    let library = match witness {
+        Some(dir) => dir.join("route_read.so"),
+        None => read_built(root, READ_SHIM),
+    };
+    read_carried(root, library)
+}
+pub(super) const READ_SHIM: &str = include_str!("route_read.c");
+/// `source` built in `root` as store.rs builds route_fsync.c (the local path).
+pub(super) fn read_built(root: &Path, source: &str) -> PathBuf {
+    let (c, library) = (root.join("route_read.c"), root.join("route_read.so"));
+    std::fs::write(&c, source).unwrap();
     let built = std::process::Command::new("cc")
         .args(["-shared", "-fPIC", "-Wall", "-Wextra", "-Werror", "-o"])
         .arg(&library)
-        .arg(&source)
+        .arg(&c)
         .arg("-ldl")
         .output()
         .unwrap();
     let stderr = String::from_utf8_lossy(&built.stderr);
     assert!(built.status.success(), "the read shim builds: {stderr}");
-    let digest = sha2::Sha256::digest(std::fs::read(&library).unwrap());
+    library
+}
+/// A shim child's three variables: the preload, the arm file in the child's
+/// own root, and the digest the parent takes of the library's bytes before
+/// the child starts (SB3E-R32.1). A library that is not read panics here.
+pub(super) fn read_carried(root: &Path, library: PathBuf) -> Vec<(&'static str, PathBuf)> {
+    use sha2::Digest;
+    let bytes = std::fs::read(&library);
+    let bytes = bytes.unwrap_or_else(|e| panic!("the read shim {library:?} is not read: {e}"));
+    let digest = sha2::Sha256::digest(bytes);
     let hex: String = digest.iter().map(|b| format!("{b:02x}")).collect();
     let (key, arm) = (super::store::SHIM_SHA256, root.join("read.arm"));
     vec![
@@ -475,6 +503,83 @@ fn read_env(root: &Path) -> Vec<(&'static str, PathBuf)> {
         (ARM, arm),
         (key, PathBuf::from(hex)),
     ]
+}
+/// CELL-RF-10: a cell child's half of the witness (s5 imports only `reader`):
+/// with a digest in its environment, `store::shim_witness`.
+pub(super) fn shim_child() {
+    if std::env::var_os(super::store::SHIM_SHA256).is_some() {
+        super::store::shim_witness();
+    }
+}
+/// CELL-RF-10: the parent's half for a cell, as a value: the digest it took,
+/// only if the child's stdout holds exactly one witness line and that line
+/// names this 64-hex digest (`store::shim_witnessed`'s rule, not panicking,
+/// so that `witness::credited` names the refusal).
+pub(super) fn shim_parent(extra: &[(&'static str, PathBuf)], stdout: &str) -> Option<String> {
+    let key = super::store::SHIM_SHA256;
+    let want = extra.iter().find(|(k, _)| *k == key)?.1.to_string_lossy();
+    let hex = want.len() == 64 && want.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'));
+    let once = stdout
+        .matches(&format!("ROUTE SHIM SHA256 {want}\n"))
+        .count()
+        == 1;
+    let reports = stdout.matches("ROUTE SHIM SHA256 ").count();
+    (hex && once && reports == 1).then(|| want.to_string())
+}
+/// CELL-RF-10 (rule level): with a carrier directory the preload is its
+/// `route_read.so` and the digest is that file's; nothing is built in the
+/// child's root and nothing is added to or changed in the directory; a
+/// missing file panics and builds nothing; with no directory the shim is
+/// built in the child's root.
+#[test]
+fn route_read_env_takes_the_witness_and_never_builds() {
+    use sha2::Digest;
+    let top = std::env::temp_dir().join(format!("sb3e-route-{}-read-env", std::process::id()));
+    let (dir, child) = (top.join("witness"), top.join("child"));
+    for made in [&top, &dir, &child] {
+        std::fs::DirBuilder::new().mode(0o700).create(made).unwrap();
+    }
+    let names = |d: &Path| -> Vec<std::ffi::OsString> {
+        let listed = std::fs::read_dir(d).unwrap();
+        listed.map(|e| e.unwrap().file_name()).collect()
+    };
+    let file = dir.join("route_read.so");
+    std::fs::write(&file, b"the witness bytes").unwrap();
+    let env = read_env_in(&child, Some(dir.clone()));
+    let of = |k: &str| env.iter().find(|e| e.0 == k).map(|e| e.1.clone());
+    let digest = sha2::Sha256::digest(b"the witness bytes");
+    let hex: String = digest.iter().map(|b| format!("{b:02x}")).collect();
+    assert_eq!(
+        of("LD_PRELOAD"),
+        Some(file.clone()),
+        "read_env: the witness"
+    );
+    let taken = of(super::store::SHIM_SHA256);
+    assert_eq!(
+        taken,
+        Some(PathBuf::from(hex)),
+        "read_env: the witness digest"
+    );
+    assert_eq!(of(ARM), Some(child.join("read.arm")));
+    assert!(names(&child).is_empty(), "read_env: built beside a witness");
+    assert_eq!(
+        names(&dir),
+        ["route_read.so"],
+        "read_env: wrote the witness"
+    );
+    assert_eq!(std::fs::read(&file).unwrap(), b"the witness bytes");
+    let (absent, root) = (top.join("absent"), child.clone());
+    let missing = std::panic::catch_unwind(move || read_env_in(&root, Some(absent)));
+    assert!(missing.is_err(), "read_env: a missing witness is built");
+    assert!(
+        names(&child).is_empty(),
+        "read_env: built for a missing witness"
+    );
+    let built = read_env_in(&child, None);
+    let library = built.iter().find(|e| e.0 == "LD_PRELOAD").unwrap();
+    assert_eq!(library.1, child.join("route_read.so"));
+    assert!(library.1.exists(), "read_env: the local shim is built");
+    std::fs::remove_dir_all(&top).unwrap();
 }
 
 #[test]

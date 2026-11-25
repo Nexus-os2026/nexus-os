@@ -8,6 +8,8 @@
 // 673-676, 667-670, 665, 659-661 held; byte rows 429-434, 441-446, 417-422 typed.
 // U19b-1 (SB3E-R216): registration_install rows 413, 416, 653-656 held and
 // 405-410 typed; the metadata-gate rows 453-500 (B1 and B2i); their controls.
+// CELL-RF-10 (SB3E-R267): the read_failure rows 411, 423, 435, 447, 459, 471,
+// 483, 495, each in a child that carries the read shim (`s5::cell`).
 use super::{
     s5::{read_registered, registered, Facts},
     Fixture,
@@ -132,6 +134,10 @@ pub(super) fn record_partial_ctrl_d(f: &Fixture) -> Facts {
 pub(super) fn record_master_close(f: &Fixture) -> Facts {
     read_registered(f, RECORD, ("master_close", "master_close"), STOPPED)
 }
+/// CELL-RF-10 (x:435): the armed read shim fails the reader's read.
+pub(super) fn record_read_failure(f: &Fixture) -> Facts {
+    read_registered(f, RECORD, ("read_failure", "read_failure"), STOPPED)
+}
 pub(super) fn reserve_cr(f: &Fixture) -> Facts {
     read_registered(f, RESERVE, ("CR", "stop0d"), REFUSED)
 }
@@ -150,6 +156,10 @@ pub(super) fn reserve_partial_ctrl_d(f: &Fixture) -> Facts {
 pub(super) fn reserve_master_close(f: &Fixture) -> Facts {
     read_registered(f, RESERVE, ("master_close", "master_close"), REFUSED)
 }
+/// CELL-RF-10 (x:447): the armed read shim fails the reader's read.
+pub(super) fn reserve_read_failure(f: &Fixture) -> Facts {
+    read_registered(f, RESERVE, ("read_failure", "read_failure"), REFUSED)
+}
 pub(super) fn readiness_cr(f: &Fixture) -> Facts {
     read_registered(f, READY, ("CR", "stop0d"), REFUSED)
 }
@@ -167,6 +177,10 @@ pub(super) fn readiness_partial_ctrl_d(f: &Fixture) -> Facts {
 }
 pub(super) fn readiness_master_close(f: &Fixture) -> Facts {
     read_registered(f, READY, ("master_close", "master_close"), REFUSED)
+}
+/// CELL-RF-10 (x:423): the armed read shim fails the reader's read.
+pub(super) fn readiness_read_failure(f: &Fixture) -> Facts {
+    read_registered(f, READY, ("read_failure", "read_failure"), REFUSED)
 }
 pub(super) fn install_repeated(f: &Fixture) -> Facts {
     registered(f, INSTALL, "repeated", CANCELLED)
@@ -208,6 +222,10 @@ pub(super) fn install_partial_ctrl_d(f: &Fixture) -> Facts {
 pub(super) fn install_master_close(f: &Fixture) -> Facts {
     read_registered(f, INSTALL, ("master_close", "master_close"), STOPPED)
 }
+/// CELL-RF-10 (x:411): the armed read shim fails the reader's read.
+pub(super) fn install_read_failure(f: &Fixture) -> Facts {
+    read_registered(f, INSTALL, ("read_failure", "read_failure"), STOPPED)
+}
 // U19b-1 (SB3E-R216): the metadata-gate rows of registration_version,
 // _status, _tags and _show, each held at its own ord of `model.gate.checked`
 // (s5 `REG_GATES`); the CAS refuses with `model_cancelled` (model.rs:244-248).
@@ -232,6 +250,10 @@ pub(super) fn version_partial_ctrl_d(f: &Fixture) -> Facts {
 }
 pub(super) fn version_master_close(f: &Fixture) -> Facts {
     read_registered(f, VERSION, ("master_close", "master_close"), CANCELLED)
+}
+/// CELL-RF-10 (x:495): the armed read shim fails the reader's read.
+pub(super) fn version_read_failure(f: &Fixture) -> Facts {
+    read_registered(f, VERSION, ("read_failure", "read_failure"), CANCELLED)
 }
 pub(super) fn version_repeated(f: &Fixture) -> Facts {
     registered(f, VERSION, "repeated", CANCELLED)
@@ -260,6 +282,10 @@ pub(super) fn status_partial_ctrl_d(f: &Fixture) -> Facts {
 pub(super) fn status_master_close(f: &Fixture) -> Facts {
     read_registered(f, STATUS, ("master_close", "master_close"), CANCELLED)
 }
+/// CELL-RF-10 (x:471): the armed read shim fails the reader's read.
+pub(super) fn status_read_failure(f: &Fixture) -> Facts {
+    read_registered(f, STATUS, ("read_failure", "read_failure"), CANCELLED)
+}
 pub(super) fn status_repeated(f: &Fixture) -> Facts {
     registered(f, STATUS, "repeated", CANCELLED)
 }
@@ -287,6 +313,10 @@ pub(super) fn tags_partial_ctrl_d(f: &Fixture) -> Facts {
 pub(super) fn tags_master_close(f: &Fixture) -> Facts {
     read_registered(f, TAGS, ("master_close", "master_close"), CANCELLED)
 }
+/// CELL-RF-10 (x:483): the armed read shim fails the reader's read.
+pub(super) fn tags_read_failure(f: &Fixture) -> Facts {
+    read_registered(f, TAGS, ("read_failure", "read_failure"), CANCELLED)
+}
 pub(super) fn tags_repeated(f: &Fixture) -> Facts {
     registered(f, TAGS, "repeated", CANCELLED)
 }
@@ -313,6 +343,10 @@ pub(super) fn show_partial_ctrl_d(f: &Fixture) -> Facts {
 }
 pub(super) fn show_master_close(f: &Fixture) -> Facts {
     read_registered(f, SHOW, ("master_close", "master_close"), CANCELLED)
+}
+/// CELL-RF-10 (x:459): the armed read shim fails the reader's read.
+pub(super) fn show_read_failure(f: &Fixture) -> Facts {
+    read_registered(f, SHOW, ("read_failure", "read_failure"), CANCELLED)
 }
 pub(super) fn show_repeated(f: &Fixture) -> Facts {
     registered(f, SHOW, "repeated", CANCELLED)
