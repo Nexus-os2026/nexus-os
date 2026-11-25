@@ -13,19 +13,23 @@ citation this check
   2. compares the cited line, from the cited column to the end of the line (no column: from its first non-blank
      character), with the stored content anchor (F5: that the line holds some panic site is not enough).
 It fails closed. A finding is: a cited path that is not exactly one tracked file (`unresolved`), a mutation that
-cannot be applied (`mutation`), a line or column that the planted file does not have (`absent`), a citation without
+cannot be applied (`mutation`), two plants with one name and citation (`duplicate`), a line or column that the
+planted file does not have (`absent`), a citation without
 an anchor (`missing_anchor`), an anchor that differs (`stale`), and an anchor that no citation uses (`extra_anchor`).
 
 tools/route_linecite.json holds the anchors: cited file -> plant name -> citation -> anchor. `--write` takes them from
 the current tree, so its diff is reviewed data: a citation that only moved keeps its anchor text.
 """
 import argparse
+import contextlib
 import hashlib
+import io
 import json
 import os
 import re
 import subprocess
 import sys
+import tempfile
 
 PLANTS = "tools/gatebox/route/route_plants.json"
 ANCHORS = "tools/route_linecite.json"
@@ -49,10 +53,11 @@ class Source:
 
     def text(self, path):
         if path not in self.cache:
+            # SB3E-R277 F4: universal newlines, as route_plants.apply_run reads (and so writes back) a planted file.
             if self.sha:
-                self.cache[path] = self.git("show", f"{self.sha}:{path}")
+                self.cache[path] = self.git("show", f"{self.sha}:{path}").replace("\r\n", "\n").replace("\r", "\n")
             else:
-                with open(os.path.join(self.repo, path), encoding="utf-8", newline="") as handle:
+                with open(os.path.join(self.repo, path), encoding="utf-8") as handle:
                     self.cache[path] = handle.read()
         return self.cache[path]
 
@@ -69,7 +74,7 @@ class Memory:
 
 def planted(src, plant, path):
     """(`path` as this plant's own run sees it, None), or (None, why it cannot be read). route_plants.apply_run's rules."""
-    if plant["file"] != path:
+    if os.path.normpath(plant["file"]) != path:  # SB3E-R277 F3: route_plants joins the path, so `./a//x.rs` is a/x.rs
         return src.text(path), None
     if "symlink" in plant:
         return None, "the cited file is the plant's own symlink"
@@ -86,14 +91,19 @@ def planted(src, plant, path):
 def observe(src):
     """Every citation once, in the file's order: its cited file, plant, citation and the text there (`at`), or the
     finding `kind` that says why there is none."""
-    rows = {}
-    for plant in src.plants():
-        files = src.tracked + ([plant["file"]] if "create" in plant or "symlink" in plant else [])
+    rows, owner = {}, {}
+    for index, plant in enumerate(src.plants()):
+        files = src.tracked + ([os.path.normpath(plant["file"])] if "create" in plant or "symlink" in plant else [])
         for expect in plant.get("expect", []):
             for cite in CITE.finditer(expect):
                 found = sorted({p for p in files if p == cite[1] or p.endswith("/" + cite[1])})
                 row = {"path": found[0] if len(found) == 1 else cite[1], "plant": plant["name"], "cite": cite[0], "at": None}
-                rows.setdefault((row["plant"], row["cite"]), row)
+                first = rows.setdefault((row["plant"], row["cite"]), row)
+                if first is not row:  # SB3E-R277 F2: a second plant under the same name and citation is never dropped
+                    if owner[row["plant"], row["cite"]] != index:
+                        first.update(at=None, kind="duplicate", detail="two plants share this name and citation")
+                    continue
+                owner[row["plant"], row["cite"]] = index
                 if len(found) != 1:
                     row.update(kind="unresolved", detail=f"{len(found)} tracked files end with the cited path")
                     continue
@@ -159,7 +169,7 @@ TOKEN = r"(?:debug_)?assert(?:_eq|_ne)?!|panic!|unreachable!|unimplemented!|todo
 SELF_PLANTS = (
     ("token_only", 'elif row["at"] ' + "!= want:", f'elif not re.match(r"""{TOKEN}""", row["at"]):',
      {"stale_77e8ae74": R248[2:], "stale_36d43f3f": R248[2:], "memory_other_assert": []}),
-    ("no_mutation_first", 'if plant["file"] ' + "!= path:", "if True:",
+    ("no_mutation_first", 'if os.path.normpath(plant["file"]) ' + "!= path:", "if True:",
      {"fixed_5bdffa94": ["l_s4_panic_not_caught", "l_s5_recording_lane_records_nothing"],
       "fixed_3ec9759a": ["l_s4_panic_not_caught", "l_s5_recording_lane_records_nothing"],
       "stale_77e8ae74": sorted(["l_s4_panic_not_caught"] + R248[:3] + R248[4:]),
@@ -210,6 +220,25 @@ def controls(repo, base):
     memory("unresolved", same, "x.rs:3:5", {"x.rs": {"m": {"x.rs:3:5": "assert!(two);"}}}, ["m"], ["unresolved"],
            {"a/x.rs": RS, "b/x.rs": RS})
     memory("missing_anchor", same, "x.rs:3:5", {}, ["m"], ["missing_anchor"])
+    twice = [{"name": "m", "file": "a/x.rs", "expect": ["x.rs:3:5"], "old": old, "new": ""} for old in ("    one();\n", "two")]
+    control("memory_duplicate", check(Memory({"a/x.rs": RS}, twice), anchor)[1], ["m"], ["duplicate"])
+    # SB3E-R277 F6: the working-tree reader and main()'s exit code, on scratch trees outside the repository. The plant's
+    # path is unnormalised (F3) and the correct tree holds a lone CR (F4); the stale tree's file is shifted by one line.
+    moved = {"a/x.rs": {"m": {"x.rs:2:5": "assert!(two);"}}}
+    plant = {"name": "m", "file": "./a//x.rs", "expect": ["x.rs:2:5"], "old": "    one();\n", "new": ""}
+    with tempfile.TemporaryDirectory() as tmp:
+        for name, text, flagged, code in (("tree_correct", RS.replace("{\n", "{\r"), [], 0), ("tree_shifted", "//\n" + RS, ["m"], 1)):
+            tree = os.path.join(tmp, name)
+            for path, body in (("a/x.rs", text), (PLANTS, json.dumps({"plants": [plant]})), (ANCHORS, json.dumps({"anchors": moved}))):
+                os.makedirs(os.path.dirname(os.path.join(tree, path)), exist_ok=True)
+                with open(os.path.join(tree, path), "w", encoding="utf-8", newline="") as handle:
+                    handle.write(body)
+            for args in (["init", "-q", tree], ["-C", tree, "add", "-A"]):
+                subprocess.run(["git"] + args, check=True, capture_output=True)
+            with contextlib.redirect_stdout(io.StringIO()):
+                exit_code = main(["--repo", tree])
+            control(name, check(Source(tree), moved)[1], flagged, ["stale"] if flagged else [])
+            out[-1].update(exit=exit_code, ok=out[-1]["ok"] and exit_code == code)
     return out
 
 
@@ -235,7 +264,7 @@ def selftest(repo):
     return 1 if failed else 0
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo", default=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     parser.add_argument("--sha")
@@ -243,7 +272,7 @@ def main():
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--write", action="store_true")
     mode.add_argument("--selftest", action="store_true")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     repo = os.path.abspath(args.repo)
     if args.selftest:
         return selftest(repo)
