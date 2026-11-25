@@ -365,11 +365,11 @@ final re-check, so no run starts or stops and no qualification evidence is writt
 meanwhile (SB3E-R21.2). An existing install
 is upgraded only by the separate action, never by `install` (which still refuses
 every existing output). After PIN and independent bundle review, with the new
-bundle extracted to the installer's `UPGRADE_BOOT` (`/root/gatebox-gb3` since GB3;
-GB1's `/root/gatebox-gb1` and GB2's `/root/gatebox-gb2` are left in place) exactly as `/root/gatebox-slice1` above:
+bundle extracted to the installer's `UPGRADE_BOOT` (`/root/gatebox-gb4b` since GB4b;
+GB1's `/root/gatebox-gb1`, GB2's `/root/gatebox-gb2` and GB3's `/root/gatebox-gb3` are left in place) exactly as `/root/gatebox-slice1` above:
 
 ```bash
-sudo /bin/bash /root/gatebox-gb3/tools/gatebox/install.sh upgrade \
+sudo /bin/bash /root/gatebox-gb4b/tools/gatebox/install.sh upgrade \
   --bundle-sha256 "$GBX_BUNDLE_SHA" --old-bundle-sha256 "$GBX_OLD_BUNDLE_SHA"
 ```
 
@@ -432,6 +432,50 @@ selects, so GB1/GB2 route receipts (version 1) still authenticate, as `historica
 `client.py` and `verify.py --latest` take `--route-pins-sha256`. The PIN step requires
 `FILES` and `NOT_INSTALLED` to partition the tracked `tools/gatebox` files exactly and
 packages only `FILES`.
+
+### GB4b: the shim witness, the probe record and the PTY canary (SB3E-R19 B1, R32.1, R108, R252, R257; route policy version 3)
+
+**Shim witness.** The route policy names a witness directory (`witness.dir`,
+`/run/gate/witness`), its exact files (`route_read.so`) and a gate `route_shim`, the C
+compiler command that builds that file from the snapshot's
+`mother/host/tests/route_cells/route_read.c`. After the harness bytes are verified and
+before the first harness process (`--list`), init makes the directory itself with an
+exclusive `mkdir` (mode 0700; a directory that already exists is refused), runs the
+gate, requires quiescence (`after-route-shim`) and exit 0, requires the directory to
+hold exactly the policy's files as bounded regular files read without following links,
+and seals their bytes into the private stream as `witness-<file>`. It reads the
+directory again after the listing (with only init alive) and after the run; another
+file set or other bytes end the run (`WITNESS: <stage>: …`). The harness receives the
+directory as `ROUTE_WITNESS_DIR` and must not write there.
+
+The supervisor publishes each witness as a log and computes `lane.shims`
+(`{file: sha256}`) from those published bytes, never from a value the payload names. A
+version 3 success receipt is refused unless `lane.shims` names exactly the policy's
+files and each digest equals its published log. GB3 receipts (version 2) and GB1/GB2
+receipts (version 1) still validate under their retained policy, as `historical`, and
+cannot carry `shims`.
+
+Limits, also in the policy's trust statement: a change and restore of the witness
+within the run is not seen, because the harness runs as init's user (F6); the box does
+not observe that a cell's child preloads the witness, which remains reviewed harness
+behaviour; and the digest depends on the host C compiler and libraries (F7), so the
+review record's independent rebuild is made on the same host.
+
+**Probe record.** `probe.payload` names the stage of a failing sensor
+(`PROBE <stage>: <type>: <message>`; stages `private-fds`, `A1`, `A6`, `A8`, `A5`,
+`A5-desktop`, `<row>-sensor`, `version-<name>`). Init sends that failure as one bounded
+(2000 bytes), terminated record `probe-failure` and still fails the run. The supervisor
+quotes a complete record in the FAILED receipt's `missing_evidence` as `init: …` and
+publishes it as `probe-failure.log`; an unterminated record is not quoted.
+
+**PTY canary.** A6 no longer requires the frozen `probe-context.json` path alone to
+refuse. Every numbered entry of the payload's visible `/dev/pts`, and the frozen path,
+must refuse to open (`EACCES`, `EPERM` or `ENOENT`), except the probe's own two PTYs,
+which are known by the inode identity (`st_dev`, `st_ino`, `st_rdev`) of the probe's
+own descriptors, never by name or number. A PTY that opens, including one at the frozen
+path, fails with `host PTY accessible`; any other error fails with
+`host PTY probe error`. So a run no longer fails because the kernel gave the probe the
+frozen number (SB3E-R252), and no host process needs to hold it.
 
 ## Maintenance: retained custody and reboot-only reinstallation
 

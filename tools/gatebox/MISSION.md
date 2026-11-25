@@ -245,6 +245,21 @@ its reviewed SHA-256, run without a TMPDIR override, observe installed C2 RED
 and reboot. Installed bytes remain unchanged; there is nothing to restore.
 This mission claims no installed PASS, CI parity or phase advancement.
 
+## GB4b-A amendment (SB3E-R257)
+
+Route policy version 3. Init builds the read shim (`route_read.so`) with the policy's
+command into a witness directory that init makes itself, seals its bytes before the
+first harness process and re-reads it after the listing and after the run; the
+supervisor derives `lane.shims` from the published bytes, and a version 3 receipt
+without exactly that digest is refused. Earlier route receipts validate under their
+retained policy. A failed payload probe is published as one bounded, terminated record
+that names its stage. The A6 PTY canary compares against the probe's own PTYs by inode
+identity and still fails on any PTY that opens, the frozen path included. Not claimed:
+a same-user change and restore of the witness within a run (F6), that a child preloads
+the witness (reviewed harness behaviour), and a digest that is stable across host
+compiler upgrades (F7). Installed behaviour is proven only by the qualification runs
+after the Owner's upgrade.
+
 ## Q16 pre-install correction
 
 After authenticating the fixture receipt, wait at most five seconds, polling,
