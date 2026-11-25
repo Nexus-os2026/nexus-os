@@ -138,8 +138,10 @@ const OWED_FORMS: [(&str, &str, &str, &str); 12] = [
 ];
 /// R214.3 D1 over the facts' identifiers: every production occurrence but
 /// its own `fn`, `file|enclosing fn|name[*count]`. A new caller of the
-/// identity view or of the inference admission, or a new cap, is unlisted.
-const OWED_NAMES: [&str; 5] = [
+/// identity view, of the inference admission or of `model_call` (R283 S4),
+/// or a new cap, is unlisted.
+const OWED_NAMES: [&str; 6] = [
+    "model_call",
     "model_identity",
     "admit_inference",
     "max_model_calls",
@@ -153,8 +155,10 @@ src/adapter/lite_review4.rs|approved|max_model_calls
 src/adapter/lite_review5.rs|approved|max_model_calls
 src/adapter/lite_review6.rs|lite_failure_after_recognised_file|max_model_calls
 src/adapter/mod.rs|-|admit_inference
+src/adapter/mod.rs|model_call|model_call
 src/adapter/mod.rs|model_identity|model_identity
 src/adapter/session_port.rs|-|admit_inference*3
+src/adapter/session_port.rs|model_call|model_call*3
 src/adapter/session_port.rs|model_identity|model_identity*3
 src/consent.rs|-|max_model_calls
 src/consent.rs|lines|max_model_calls
@@ -167,14 +171,19 @@ src/coordinator.rs|run_lanes|model_identity
 src/coordinator.rs|submit|max_model_calls
 src/coordinator.rs|submit|model_identity
 src/coordinator/model_calls.rs|admit|admit_inference
+src/coordinator/model_calls.rs|call|model_call
 src/coordinator/model_calls.rs|reserve_lane|max_model_calls
 src/page_builder/lane.rs|-|PageBuilderLane*2
 src/page_mission.rs|-|max_model_calls
 src/page_mission.rs|preview|max_model_calls
 src/teaching.rs|explain|max_model_calls
 ";
-/// Every production `fn max_model_calls` (a definition is not a D1 row).
-const CAP_DEFINITIONS: [&str; 2] = ["src/lane.rs", "src/page_builder/lane.rs"];
+/// Every production `fn max_model_calls`, counted (R283 S2; a definition is
+/// not a D1 row): the trait default and `PageBuilderLane`'s.
+const CAP_DEFINITIONS: &str = "\
+src/lane.rs|-|fn max_model_calls
+src/page_builder/lane.rs|-|fn max_model_calls
+";
 /// `page_preview` only previews: none of these names in its body.
 const PREVIEW_FORBIDDEN: [&str; 8] = [
     "spawn",
@@ -247,8 +256,10 @@ src/coordinator/lite.rs|stop|stop
 ";
 /// governed-control, walked from its own root (`gc:` rows; SB3E-R260.1 F6):
 /// the revocation only. `close_session_authority`'s loop is the one
-/// production revoker; `revoke_grant`'s one caller is the S3 seam.
-const W1_GC_NAMES: [(&str, &str); 2] = [
+/// production revoker, itself pinned by name (R283 S3: one caller, the
+/// close path); `revoke_grant`'s one caller is the S3 seam.
+const W1_GC_NAMES: [(&str, &str); 3] = [
+    ("close_session_authority", "grant_revocation"),
     ("revoke_grant", "grant_revocation"),
     ("revoke", "grant_revocation"),
 ];
@@ -266,6 +277,7 @@ gc:src/governed/files_exec_tests.rs|arm|revoke_grant
 gc:src/governed/files_exec_tests.rs|m2d_b2_d_o16_the_bridge_through_the_composed_route|revoke_grant
 gc:src/governed/files_tests.rs|m2d_b1_d_o12_prepare_refusals_leave_nothing|revoke_grant
 gc:src/governed/session_routes_tests.rs|session_each_native_work_step_rechecks_its_actual_prerequisites|revoke_grant
+gc:src/host_session/close.rs|settle_close_authority|close_session_authority
 gc:src/host_session/route_s3.rs|route_revoke_original_grant|revoke_grant
 gc:src/inference.rs|drop|revoke
 ";
@@ -276,6 +288,12 @@ fn lexed(sources: &[(String, String)]) -> Lexed<'_> {
         .iter()
         .filter(|(_, s)| tokens(s).is_ok())
         .map(|(f, s)| (f.as_str(), lex(s)))
+        .collect()
+}
+/// R283 S1: a file that does not tokenize is a finding, never a silent drop.
+fn untokenized(tag: &str, sources: &[(String, String)]) -> Vec<String> {
+    let bad = sources.iter().filter(|(_, s)| tokens(s).is_err());
+    bad.map(|(f, _)| format!("walk: {tag}{f} does not tokenize"))
         .collect()
 }
 /// governed-control's non-production files: its integration tests and the
@@ -332,7 +350,7 @@ fn pin_findings(what: &str, rows: &[String], pins: &str) -> Vec<String> {
 fn owed_fact_findings(sources: &[(String, String)]) -> Vec<String> {
     let l = lexed(sources);
     let mods = test_mods(&l);
-    let mut found = Vec::new();
+    let mut found = untokenized("", sources);
     for (fact, file, within, text) in OWED_FORMS {
         let Some((_, t)) = l.iter().find(|(f, _)| *f == file) else {
             found.push(format!("owed facts: {fact}: no {file}"));
@@ -365,24 +383,19 @@ fn owed_fact_findings(sources: &[(String, String)]) -> Vec<String> {
             }
         }
     }
-    // F2: no cap is defined outside the two reviewed files.
-    let mut defined: Vec<&str> = l
-        .iter()
-        .filter(|(f, _)| !caller_excluded(f, &mods))
-        .filter(|(_, t)| {
-            !production_sites(t, |i| {
-                i > 0 && t[i - 1] == "fn" && t[i] == "max_model_calls"
-            })
-            .is_empty()
-        })
-        .map(|(f, _)| *f)
-        .collect();
-    defined.sort();
-    if defined != CAP_DEFINITIONS {
-        found.push(format!(
-            "owed facts: F2: fn max_model_calls is defined in {defined:?}, not {CAP_DEFINITIONS:?}"
-        ));
+    // F2: the cap definitions are exactly the counted rows (a second one in a listed file too).
+    let mut defined = Vec::new();
+    for (file, t) in l.iter().filter(|(f, _)| !caller_excluded(f, &mods)) {
+        let cap = |i: usize| i > 0 && t[i - 1] == "fn" && t[i] == "max_model_calls";
+        for (within, _) in production_sites(t, cap) {
+            defined.push(format!("{file}|{within}|fn max_model_calls"));
+        }
     }
+    found.extend(pin_findings(
+        "owed facts: F2 cap definitions",
+        &defined,
+        CAP_DEFINITIONS,
+    ));
     // F2: the shipped host implements `Lane` once, for `ObservedLane`.
     for (file, t) in l.iter().filter(|(f, _)| !caller_excluded(f, &mods)) {
         if !(file.starts_with("host/src/") || file.starts_with("desktop/src/")) {
@@ -436,6 +449,10 @@ fn w1_findings(sources: &[(String, String)], gc: &[(String, String)]) -> Facts {
         let found = by_event
             .get_mut(W1_GUARDS[NO_CALLER.iter().position(|e| *e == event).unwrap()])
             .unwrap();
+        found.extend(untokenized("", sources));
+        if event == "grant_revocation" {
+            found.extend(untokenized("gc:", gc));
+        }
         found.extend(pin_findings(&what, &rows, &pinned(W1_SITES, &names)));
         found.extend(pin_findings(
             &what,
@@ -449,7 +466,7 @@ fn w1_findings(sources: &[(String, String)], gc: &[(String, String)]) -> Facts {
 // --- the join ----------------------------------------------------------------
 /// What each source guard found, by the guard name a register row carries.
 type Facts = BTreeMap<&'static str, Vec<String>>;
-fn facts(sources: &[(String, String)], gc: &[(String, String)]) -> Facts {
+fn facts(sources: &[(String, String)], gc: &[(String, String)], gc_walk: &[String]) -> Facts {
     let hands = sources.iter().find(|(f, _)| f == "host/src/hands.rs");
     let order = hands.map_or_else(|| vec!["no hands.rs".into()], |h| order_findings(&h.1));
     let mut by_guard = Facts::from([
@@ -461,6 +478,12 @@ fn facts(sources: &[(String, String)], gc: &[(String, String)]) -> Facts {
         ("none", Vec::new()),
     ]);
     by_guard.extend(w1_findings(sources, gc));
+    // R283 S1: a symlink or an unreadable entry of the gc walk is a finding.
+    let walk = gc_walk.iter().map(|f| format!("walk: gc: {f}"));
+    by_guard
+        .entry("w1_grant_revocation")
+        .or_default()
+        .extend(walk);
     by_guard
 }
 fn sha256(text: &str) -> String {
@@ -671,9 +694,9 @@ fn activation_findings(
 }
 
 // --- the real tree, and the controls -------------------------------------------
-fn gc_sources() -> Vec<(String, String)> {
+fn gc_sources() -> (Vec<(String, String)>, Vec<String>) {
     let root = crate::adapter::scan::crate_root().join("../crates/nexus-governed-control");
-    crate::adapter::scan::route_guard_sources(&root).0
+    crate::adapter::scan::route_guard_sources(&root)
 }
 fn data(file: &str) -> String {
     crate::adapter::scan::route_guard_data(file)
@@ -689,8 +712,8 @@ struct Tree {
 }
 impl Tree {
     fn read() -> Self {
-        let (sources, gc) = (walked().0, gc_sources());
-        let facts = facts(&sources, &gc);
+        let (sources, (gc, gc_walk)) = (walked().0, gc_sources());
+        let facts = facts(&sources, &gc, &gc_walk);
         let [expect, manifest, register] = [EXPECT_TSV, MANIFEST_RS, REGISTER_TSV].map(data);
         Self {
             sources,
@@ -798,7 +821,10 @@ fn sb3e_u22_owed_guard_controls() {
     for (plant, planted, want) in [
         ("the refusal replaced by a dispatch", planted(s, h, refusal, "                runtime.lock().unwrap().page(page);\n"), "owed facts: F1 refusal"),
         ("ObservedLane gets cap 1", planted(s, h, observed, &format!("{observed}{cap}")), "owed facts: F2 ObservedLane impl"),
-        ("ObservedLane forwards the cap", planted(s, h, tail, forward), "owed facts: F2: fn max_model_calls is defined in [\"host/src/hands.rs\""),
+        ("ObservedLane forwards the cap", planted(s, h, tail, forward), "owed facts: F2 cap definitions: unlisted host/src/hands.rs|-|fn max_model_calls"),
+        ("a second cap definition in src/lane.rs (S2)", planted(s, la, scripted, &format!("pub struct U22Lane;\nimpl Lane for U22Lane {{\n{cap}}}\n{scripted}")), "owed facts: F2 cap definitions: unlisted src/lane.rs|-|fn max_model_calls"),
+        ("a new model_call caller (S4)", planted(s, h, quit, &format!("    let _ = port.model_call();\n{quit}")), "owed facts: sites: unlisted host/src/hands.rs|run|model_call"),
+        ("a Mother file that does not tokenize (S1)", planted(s, la, scripted, &format!("const U22: &str = \"open;\n{scripted}")), "walk: src/lane.rs does not tokenize"),
         ("ScriptedLane gets cap 1", planted(s, la, scripted, &format!("{scripted}{cap}")), "owed facts: F2 ScriptedLane impl"),
         ("the trait default becomes 1", planted(s, la, "    fn max_model_calls(&self) -> u32 {\n        0\n    }", "    fn max_model_calls(&self) -> u32 {\n        1\n    }"), "owed facts: F2 trait default"),
         ("run_lanes: the positive-cap check removed", planted(s, co, then, "let model = self.port.model_identity();"), "owed facts: F3 identity under a positive cap"),
@@ -862,6 +888,10 @@ fn sb3e_u22_w1_caller_controls() {
     let mut gc_caller = tree.gc.clone();
     let governed = gc_caller.iter().position(|(f, _)| f == "src/governed.rs").expect("governed.rs");
     gc_caller[governed].1.push_str("\nfn u22(c: &GovernedControl, id: GrantId) {\n    let _ = c.revoke_grant(id);\n}\n");
+    let mut gc_closer = tree.gc.clone();
+    gc_closer[governed].1.push_str("\nfn u22(c: &GovernedControl) {\n    let _ = c.close_session_authority();\n}\n");
+    let mut gc_broken = tree.gc.clone();
+    gc_broken[governed].1.push_str("\nconst U22: &str = \"open;\n");
     let rows = |event: &str| tree.register.lines().filter(|l| l.contains(&format!("\tw1\t{event}\t"))).count();
     let mut misses = Vec::new();
     for (plant, sources, gc, guard, want) in [
@@ -873,6 +903,8 @@ fn sb3e_u22_w1_caller_controls() {
         ("a method-value mission stop", at("let halt = FileSession::stop;"), &tree.gc, "w1_mission_stop", "W1 mission_stop: unlisted host/src/hands.rs|run|stop"),
         ("a host grant revocation", at("let _ = control.revoke_grant(grant);"), &tree.gc, "w1_grant_revocation", "W1 grant_revocation: unlisted host/src/hands.rs|run|revoke_grant"),
         ("a governed-control caller", s.clone(), &gc_caller, "w1_grant_revocation", "W1 grant_revocation: unlisted gc:src/governed.rs|u22|revoke_grant"),
+        ("a new caller of the close revoker (S3)", s.clone(), &gc_closer, "w1_grant_revocation", "W1 grant_revocation: unlisted gc:src/governed.rs|u22|close_session_authority"),
+        ("a gc file that does not tokenize (S1)", s.clone(), &gc_broken, "w1_grant_revocation", "walk: gc:src/governed.rs does not tokenize"),
     ] {
         let by_guard = w1_findings(&sources, gc);
         killed(&mut misses, plant, &by_guard[guard], &[want]);
@@ -885,6 +917,13 @@ fn sb3e_u22_w1_caller_controls() {
         if reopened != rows(event) || reopened == 0 {
             misses.push(format!("{plant}: {reopened} W1 rows reopened, not {}", rows(event)));
         }
+    }
+    // S1: a finding of the gc walk (a symlink) reopens the grant_revocation rows.
+    let linked = facts(s, &tree.gc, &["A-1: src/u22.rs is a symlink".to_string()]);
+    let joined = tree.with(Facts::from([("w1_grant_revocation", linked["w1_grant_revocation"].clone())]));
+    killed(&mut misses, "a gc symlink", &linked["w1_grant_revocation"], &["walk: gc: A-1: src/u22.rs is a symlink"]);
+    if joined.iter().filter(|f| f.contains("becomes set B")).count() != rows("grant_revocation") {
+        misses.push("a gc symlink: the grant_revocation rows are not reopened".into());
     }
     let mut test_file = s.clone();
     test_file.push(("host/tests/u22.rs".to_string(), call.to_string()));
