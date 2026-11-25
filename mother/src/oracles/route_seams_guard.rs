@@ -148,8 +148,8 @@ const PORT_USES: &str = "\
 /// `#[path]` site of Mother's sources (G-S1).
 const PIN_DATA: &str = include_str!("route_seams_guard.pins");
 /// SB3E-R42.3 (G-S2): the pins file's sha256 and the sweep's exact count.
-const PINS_SHA256: &str = "7e1e8a195eb55d137fbeb8a1e95666a9beeb44a53281231293df795f55bd8ab7";
-const MUTANTS: usize = 3744;
+const PINS_SHA256: &str = "d3e3bccf16551dca2ac6aa289f0a14227870bdbed246885e8dfb2684b2c36f7f";
+const MUTANTS: usize = 3834;
 const REGIONS: usize = 38;
 /// SB3E-R51.1: every file of the harness directory, byte for byte, exactly
 /// this list (`name sha256`): the authority for all of `route_cells`, `s5.rs`
@@ -158,15 +158,15 @@ const REGIONS: usize = 38;
 /// advisory layer.
 const CELLS: &str = "host/tests/route_cells/";
 const ROUTE_CELLS: &str = "\
-cells.rs 1d88c33c5826d8ef98f3eae9640938b71fe31771c99c537288a414b7ee2a80fa
+cells.rs 3c54132e824d1b8547c3064903150c749625f53627a291fef489dd23005535ee
 grant.rs fbe4c4b9dc43dc86c77ed4ec9c09f8bf9ea61dc8091b8ed1866a847a99e27be4
 locks.rs 9b82f75d8ad4f2d0c47194c69be15187dd3f96291033b3a57a4105bc731ccf78
-main.rs a3a45aaf2ed1ba382f418a7b2ba4b6bbf15d2c50dbc67a42ab18c81447e4ff76
+main.rs d13d97ff0fb0b4562c06b95ad10693cc67ec814e2bd8dbb2da4422c1cf9c631e
 reader.rs 85762729304983f719c14f25b1f0366953861bdd9275a70c618fbbf1d9755c3f
 rf_controls.rs 777013f4767902daabd00a5d0ae1e8830649b493a740eed70799579cc9ef0b15
 route_read.c 05fa04a9a933dacf5c4d4a93776e695da0c885dfebba857751f16cb7f14c6b4b
 route_fsync.c 6166fe8b9eee2e9c2a84a8bcbfcc1590f14de97d7bb0d60084da674a56f0e973
-s5.rs f2ba2a7c61c07224825eec9b43c6ba965fe30671c62b32a56f22e531dff0d32e
+s5.rs 5ef3368f06208ce73bb7b011cd6045bc50d3e09355ff35c1cfd723f5bee6df9f
 s5_close.rs 6127e5b54a2032998559214f4ef6efb8f7d9d765d6c55097367a386423434a0a
 s5_door.rs aa309f62fcd47330501a7878bc0fcad754af8df6fcd6a2adff95f6a791a15bf9
 s5_reg.rs 99a6eee2276221107b96fb794b290bdeb1183c21a9d054fd5ecd214206e28df2
@@ -174,9 +174,9 @@ s5_call_b.rs 2d7e695e5e214bf07d644db6c525b7216003e31e73d26ba6871fed0894f4e271
 s5_ident.rs d03394ae144134d8d2a9b6b8d9838abad3ad971488144593e6b1f64db6db13c6
 s5_r6.rs 42217130763f956fa59dbc92830b833a9321ca1cbfd55b269fe3d82211f2efea
 s5_r7.rs 0b0f69e6f9af82669f58fb6027aeedc845a0a24dd44e483c828effb96fd942a4
-s5_r8.rs 0f713aef9892d23c2a324520dc29dd9a75fff2cb08c4cd24cf44d451e3a70e38
+s5_r8.rs 7a0a34b9e31ab9ffdeda58a68de54b9f11e3865b33611dddc1f8e6c5b8d05e2d
 s5_r34.rs c78eda7f31a14ebf1e2c7902c484123f0faa5ea1e8e03d0ef3d3a018a7f8ed20
-witness.rs 27cf374b94e66cbb0e07df971b67154a3054506491051d16e41d80effca3b6b1
+witness.rs 9c6d8b02a3dc18d9694df321f2d34d2134d3592a33b0be899a5ceb2cedfbaf6e
 store.rs 0dabb6132cfc184a99b4627b983226cdef3390785c8e60daa189bba5bc737b00
 report.rs 29250bdce566726d69473bd8afffa8a04c79e04f8589ed9d41dbf94f845f744f
 s5_report.rs fed9e772fe9f00880077ca56f4a229742208bcdd904314cf5126fc91ba7166c9
@@ -206,7 +206,7 @@ s5_r8.rs|U20c|lane_result_admission:ingress,lane_result_admission:lifecycle,post
 s5_report.rs|U21a|close_report:lifecycle,close_report:fault,close_report:schedule|ctl_close_report|super::report::reached,super::report::Hold,super::report::Owner,super::s5::collect_report,super::s5::Facts,super::Fixture|-
 ";
 /// Item 1(a): the directory's files that are not sections, closed.
-const NON_SECTIONS: [&str; 11] = [
+const NON_SECTIONS: [&str; 12] = [
     "cells.rs",
     "grant.rs",
     "locks.rs",

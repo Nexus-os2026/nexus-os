@@ -22,22 +22,22 @@
   },
   "mother/host/tests/route_cells/s5.rs": {
    "l_s4b_applied_after_the_lock_is_taken": {
-    "route_cells/s5.rs:1084:13": "assert_eq!(format!(\"{advanced:?}\"), \"Err(Poisoned)\");"
+    "route_cells/s5.rs:1086:13": "assert_eq!(format!(\"{advanced:?}\"), \"Err(Poisoned)\");"
    },
    "l_s4b_poisons_nothing": {
-    "route_cells/s5.rs:1084:13": "assert_eq!(format!(\"{advanced:?}\"), \"Err(Poisoned)\");"
+    "route_cells/s5.rs:1086:13": "assert_eq!(format!(\"{advanced:?}\"), \"Err(Poisoned)\");"
    },
    "l_s5_admit_widened_to_charged": {
-    "route_cells/s5.rs:638:68": "unwrap();"
+    "route_cells/s5.rs:640:68": "unwrap();"
    },
    "l_s5_recording_lane_records_nothing": {
-    "route_cells/s5.rs:1024:13": "assert_eq!(entry.invocation, recorded.last().map(|r| r.1));"
+    "route_cells/s5.rs:1026:13": "assert_eq!(entry.invocation, recorded.last().map(|r| r.1));"
    },
    "l_s5_session_from_no_context": {
-    "route_cells/s5.rs:638:68": "unwrap();"
+    "route_cells/s5.rs:640:68": "unwrap();"
    },
    "l_s5_wrong_invocation": {
-    "route_cells/s5.rs:638:68": "unwrap();"
+    "route_cells/s5.rs:640:68": "unwrap();"
    }
   },
   "mother/host/tests/route_cells/store.rs": {

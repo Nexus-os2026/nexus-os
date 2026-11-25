@@ -306,7 +306,7 @@ delivery|sb3_mother_post_seal_model_events_are_absent
 /// the verifier compares them. It shows consistency, not that a test ran.
 const CELLS_RS: &str = include_str!("route_cells/cells.rs");
 const EXPECT: &str = include_str!("session/model-bridge-expect.tsv");
-const EXPECT_SHA256: &str = "a308ff85b40a9e2ca72c98fe0c38702284f749b65d2bf087dcdc646e12bb75bc";
+const EXPECT_SHA256: &str = "d8e29f85b960fecaaa1fb868539051371a5a5abbc12c58929cbf8e3f4b051181";
 const UNIVERSE_SHA256: &str = "a6a5337538a92d273dd2efdcaedcf76843bbf2f3ddc6be1f6f44f3c241985fd2";
 const EXPECT_HEADER: &str = "route\tsink\tdim\tvalues\tmech\tsetup\tdriver\tentry\tcheck\texit\texec\tapply\texpect\twitness\tcontrol\tplant\trefs\tstatus";
 /// R4: `reader:` is these literal bytes, or one of the three closed paths.
@@ -2132,7 +2132,7 @@ fn sb3d_r3_d1_cells_are_executed_or_owned() {
             count("open:F1"),
             count("open:M2e-D")
         ),
-        (325, 0, 457, 1, 28),
+        (335, 0, 447, 1, 28),
         "after D2, U5b's six, U9a's eleven, U6a-1's three, U9b's five, SEAM-1's seven, U19a's 40, U21a's five, U19b-1's 44, U19b-2's 36, U20b's 12, U19c's five, U20c's 31, SEAM-2's 30, CELL-R-A's 45 and CELL-RF-10's ten credited cells: {summary:?}"
     );
     assert_eq!(
