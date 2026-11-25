@@ -10,7 +10,8 @@
 // U19b-2's 36 R5 call cells refused at ords 1-3 (SB3E-R217), U20b's twelve
 // R6 cancel_run cells (SB3E-R226), U19c's three R1 identity_view and two
 // R2 inference_binding cells (SB3E-R228), U20c's 17 R7 and 14 R8 cells
-// (SB3E-R243) and SEAM-2's 30 R3 attempt and R4 meter cells (SB3E-R242).
+// (SB3E-R243), SEAM-2's 30 R3 attempt and R4 meter cells (SB3E-R242) and
+// CELL-R-A's 45 race A byte cells under the Stop-first barrier (SB3E-R265).
 // The route_cells lane compiles it through
 // `macro_rules! cells` in main.rs, whose terminal arm is the control
 // `ctl_call_chat`; session_model_bridge.rs and check-citations.py parse it
@@ -252,4 +253,49 @@ cells! {
     r4 meter_settle lifecycle Failed;
     r4 meter_settle lifecycle ClosingNormal;
     r4 meter_settle lifecycle ClosingRestricted;
+    r2 inference_binding ingress CR;
+    r2 inference_binding ingress LF;
+    r2 inference_binding ingress CRLF;
+    r2 inference_binding ingress EOF;
+    r2 inference_binding ingress partial_Ctrl_D;
+    r2 inference_binding ingress master_close;
+    r3 attempt_ticket ingress CR;
+    r3 attempt_ticket ingress LF;
+    r3 attempt_ticket ingress CRLF;
+    r3 attempt_ticket ingress EOF;
+    r3 attempt_ticket ingress partial_Ctrl_D;
+    r3 attempt_ticket ingress master_close;
+    r3 call_slot_reserve ingress EOF;
+    r3 call_slot_reserve ingress partial_Ctrl_D;
+    r3 call_slot_reserve ingress master_close;
+    r4 meter_settle ingress CR;
+    r4 meter_settle ingress LF;
+    r4 meter_settle ingress CRLF;
+    r4 meter_settle ingress EOF;
+    r4 meter_settle ingress partial_Ctrl_D;
+    r4 meter_settle ingress master_close;
+    r7 attempt_pin_release ingress CR;
+    r7 attempt_pin_release ingress LF;
+    r7 attempt_pin_release ingress CRLF;
+    r7 attempt_pin_release ingress EOF;
+    r7 attempt_pin_release ingress partial_Ctrl_D;
+    r7 attempt_pin_release ingress master_close;
+    r7 attempt_record ingress CR;
+    r7 attempt_record ingress LF;
+    r7 attempt_record ingress CRLF;
+    r7 attempt_record ingress EOF;
+    r7 attempt_record ingress partial_Ctrl_D;
+    r7 attempt_record ingress master_close;
+    r7 operation_complete ingress CR;
+    r7 operation_complete ingress LF;
+    r7 operation_complete ingress CRLF;
+    r7 operation_complete ingress EOF;
+    r7 operation_complete ingress partial_Ctrl_D;
+    r7 operation_complete ingress master_close;
+    r8 post_record_recheck ingress EOF;
+    r8 post_record_recheck ingress partial_Ctrl_D;
+    r8 post_record_recheck ingress master_close;
+    r8 record_first_classify ingress EOF;
+    r8 record_first_classify ingress partial_Ctrl_D;
+    r8 record_first_classify ingress master_close;
 }

@@ -5,7 +5,9 @@
 //! lane is a driver-owned `RecordingLane` (A.4 item 3). `credit` is the A.2
 //! item 4/5, A.3 and A.4 check over the driver's own facts and both traces.
 // SB3E-R42.4: the parent's items by name, the guard's allow-list; no glob.
-use super::{child, fake_ollama, reader, spec, Fixture, Opened, CHILD, DIGEST, NAME, PATIENCE};
+use super::{
+    child, fake_ollama, reader, sched, spec, Fixture, Opened, CHILD, DIGEST, NAME, PATIENCE,
+};
 use nexus_governed_control::authority::approval::ResumeConfirmation;
 use nexus_governed_control::authority::approval::{
     AcknowledgementConfirmation, ActionConfirmation,
@@ -1290,6 +1292,8 @@ pub(super) struct Read {
     pub(super) trace: Vec<s7::Entry>,
     pub(super) echo: Vec<u8>,
     pub(super) since: Instant,
+    /// CELL-R-A: the Stop-first barrier's own facts, if it ran (sched.rs).
+    pub(super) sched: Option<sched::Sched>,
 }
 
 /// W0b A2: an acknowledgement, and a standing hold, of S1 or of S5.
@@ -2920,6 +2924,7 @@ impl Reading {
             trace,
             echo,
             since,
+            sched: sched::taken(),
         });
         findings
     }
@@ -3468,7 +3473,7 @@ fn pre_drive(
     let c = start(f);
     let (acks, steps, (worker, findings)) = chained(f, &c.mother, &chain, |held, worker| {
         reopen(); // M6: the window opens at the hold's acknowledgement.
-        let findings = pre_apply(&c.o, held, (value, typed));
+        let findings = pre_apply((f, row), &c.o, held, (value, typed));
         if value != "none" {
             *APPLIED.lock().unwrap() = Some(Instant::now());
         }
@@ -3511,6 +3516,7 @@ fn pre_drive(
 /// U19c: the value while held (typed through production's reader, or
 /// applied with its state read while held, R202 S2), then the release.
 fn pre_apply(
+    (f, row): (&Fixture, (&'static str, &'static str)),
     o: &Opened,
     held: Hold,
     (value, typed): (&'static str, Option<&'static str>),
@@ -3518,7 +3524,7 @@ fn pre_apply(
     if let Some(typed) = typed {
         let reading = Reading::open(o);
         let barriers = reading.typed(typed);
-        drop(held);
+        sched::stop_first(f, o, held, settled, (row, value));
         return reading.close(typed, barriers);
     }
     let (want, results) = match value {
@@ -3990,7 +3996,10 @@ fn late(
             None => door_apply(&c.o, value),
         };
         let released = at.elapsed();
-        drop(held);
+        match (typed, lane) {
+            (Some(_), false) => sched::stop_first(f, &c.o, held, settled, (row, value)),
+            _ => drop(held),
+        }
         if let (Some((r, t)), Some(keyed)) = (reading, keyed) {
             found.extend(r.close(t, keyed));
         }
@@ -4103,7 +4112,7 @@ pub(super) fn attempted(
     let (acks, steps, (worker, findings)) = chained(f, &c.mother, &chain, |held, worker| {
         reopen(); // The window opens at the hold's acknowledgement.
         let findings = match typed {
-            Some(_) => pre_apply(&c.o, held, (value, typed)),
+            Some(_) => pre_apply((f, row), &c.o, held, (value, typed)),
             None => {
                 let found = door_apply(&c.o, value); // Its state read while held.
                 drop(held);

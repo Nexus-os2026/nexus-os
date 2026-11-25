@@ -16,13 +16,14 @@ use nexus_mother::state::Trigger;
 const TABLE: &str = include_str!("../session/model-bridge-expect.tsv");
 /// W0b B1: every witness field, in the one order every row keeps (the
 /// table's 11 field sets are ordered subsets of it).
-const ORDER: [&str; 13] = [
+const ORDER: [&str; 14] = [
     "entry",
     "check",
     "value",
     "out",
     "branch",
     "ledger",
+    "sched",
     "window",
     "peer",
     "grant",
@@ -718,7 +719,7 @@ fn row(sink: &str, dim: &str, value: &str) -> Option<Vec<&'static str>> {
     rows.find(|c| c[3].split(',').any(|v| v == value))
 }
 /// The frozen witness of the row holding `value` for `sink` and `dim`.
-fn frozen(sink: &str, dim: &str, value: &str) -> Option<&'static str> {
+pub(super) fn frozen(sink: &str, dim: &str, value: &str) -> Option<&'static str> {
     row(sink, dim, value).map(|c| c[13])
 }
 /// W0b B1: a witness's shape: each field's name and value text, in order,
@@ -1060,6 +1061,10 @@ fn rendered(f: &Facts, shape: &Shape, t: &Tables) -> String {
                 "out" => out.as_ref().map(String::clone).map_err(|_| Unbound),
                 "branch" => branch.as_ref().map(String::clone).map_err(|_| Unbound),
                 "ledger" => ledger(v, t),
+                "sched" => {
+                    println!("WITNESS sched: {}", super::sched::raw(f));
+                    Ok(super::sched::named(f))
+                }
                 "window" => window(v),
                 "peer" => {
                     let chat = f.peer.iter().filter(|p| *p == "/api/chat").count();
@@ -2389,6 +2394,37 @@ fn tr1_stray(f: &super::Fixture) -> Facts {
     stray.phase = nexus_governed_control::authority::evidence::EvidencePhase::ModelRegistered;
     facts.native.push(stray);
     facts
+}
+/// CELL-R-A (SB3E-R265): per sink group, the inverse (the barrier left out:
+/// the schedule is never named) and R202 S1's stray record under the barrier.
+macro_rules! sched_controls {
+    ($($sink:ident $unforced:ident $stray:ident $value:literal;)*) => {$(
+        #[test]
+        fn $unforced() {
+            let name = concat!("witness::", stringify!($unforced));
+            let row = (stringify!($sink), "ingress", $value);
+            let drive: Drive = |f| super::sched::unforced(f, stringify!($sink));
+            differs_at(name, stringify!($unforced), drive, row, &["sched"]);
+        }
+        #[test]
+        fn $stray() {
+            let name = concat!("witness::", stringify!($stray));
+            let row = (stringify!($sink), "ingress", $value);
+            let drive: Drive = |f| super::sched::stray(f, stringify!($sink));
+            differs_at(name, stringify!($stray), drive, row, &["ledger"]);
+        }
+    )*};
+}
+sched_controls! {
+    inference_binding witness_control_unforced_bind_names_no_schedule witness_control_sched_stray_record_fails_the_bind_ledger "CR";
+    attempt_ticket witness_control_unforced_ticket_names_no_schedule witness_control_sched_stray_record_fails_the_ticket_ledger "CR";
+    call_slot_reserve witness_control_unforced_slot_names_no_schedule witness_control_sched_stray_record_fails_the_slot_ledger "EOF";
+    meter_settle witness_control_unforced_settle_names_no_schedule witness_control_sched_stray_record_fails_the_settle_ledger "CR";
+    attempt_pin_release witness_control_unforced_pin_names_no_schedule witness_control_sched_stray_record_fails_the_pin_ledger "CR";
+    attempt_record witness_control_unforced_record_names_no_schedule witness_control_sched_stray_record_fails_the_record_ledger "CR";
+    operation_complete witness_control_unforced_complete_names_no_schedule witness_control_sched_stray_record_fails_the_complete_ledger "CR";
+    post_record_recheck witness_control_unforced_recheck_names_no_schedule witness_control_sched_stray_record_fails_the_recheck_ledger "EOF";
+    record_first_classify witness_control_unforced_classify_names_no_schedule witness_control_sched_stray_record_fails_the_classify_ledger "EOF";
 }
 /// U20b (SB3E-R226 F-C; R202 S1 at d_cancel, row 171): a stray non-Stop record
 /// fails `ledger`.

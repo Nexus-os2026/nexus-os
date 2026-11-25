@@ -119,3 +119,50 @@ pub(super) fn settle_closingrestricted(f: &Fixture) -> Facts {
 pub(super) fn ctl_meter_settle(f: &Fixture) -> Facts {
     attempted(f, SETTLE, ("none", None), PASSED)
 }
+// CELL-R-A (SB3E-R265): x:69-74, 106-108 and 331-336 under the Stop-first
+// barrier (sched.rs). Open: x:103-105 (race B, owed).
+pub(super) fn ticket_cr(f: &Fixture) -> Facts {
+    attempted(f, TICKET, ("CR", Some("stop0d")), STOPPED)
+}
+pub(super) fn ticket_lf(f: &Fixture) -> Facts {
+    attempted(f, TICKET, ("LF", Some("stop0a")), STOPPED)
+}
+pub(super) fn ticket_crlf(f: &Fixture) -> Facts {
+    attempted(f, TICKET, ("CRLF", Some("stop0d0a")), STOPPED)
+}
+pub(super) fn ticket_eof(f: &Fixture) -> Facts {
+    attempted(f, TICKET, ("EOF", Some("04")), STOPPED)
+}
+pub(super) fn ticket_partial_ctrl_d(f: &Fixture) -> Facts {
+    attempted(f, TICKET, ("partial_Ctrl_D", Some("partial+04")), STOPPED)
+}
+pub(super) fn ticket_master_close(f: &Fixture) -> Facts {
+    attempted(f, TICKET, ("master_close", Some("master_close")), STOPPED)
+}
+pub(super) fn slot_eof(f: &Fixture) -> Facts {
+    attempted(f, SLOT, ("EOF", Some("04")), STOPPED)
+}
+pub(super) fn slot_partial_ctrl_d(f: &Fixture) -> Facts {
+    attempted(f, SLOT, ("partial_Ctrl_D", Some("partial+04")), STOPPED)
+}
+pub(super) fn slot_master_close(f: &Fixture) -> Facts {
+    attempted(f, SLOT, ("master_close", Some("master_close")), STOPPED)
+}
+pub(super) fn settle_cr(f: &Fixture) -> Facts {
+    attempted(f, SETTLE, ("CR", Some("stop0d")), STOPPED)
+}
+pub(super) fn settle_lf(f: &Fixture) -> Facts {
+    attempted(f, SETTLE, ("LF", Some("stop0a")), STOPPED)
+}
+pub(super) fn settle_crlf(f: &Fixture) -> Facts {
+    attempted(f, SETTLE, ("CRLF", Some("stop0d0a")), STOPPED)
+}
+pub(super) fn settle_eof(f: &Fixture) -> Facts {
+    attempted(f, SETTLE, ("EOF", Some("04")), STOPPED)
+}
+pub(super) fn settle_partial_ctrl_d(f: &Fixture) -> Facts {
+    attempted(f, SETTLE, ("partial_Ctrl_D", Some("partial+04")), STOPPED)
+}
+pub(super) fn settle_master_close(f: &Fixture) -> Facts {
+    attempted(f, SETTLE, ("master_close", Some("master_close")), STOPPED)
+}

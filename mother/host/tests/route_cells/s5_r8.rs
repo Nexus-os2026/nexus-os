@@ -76,3 +76,23 @@ pub(super) fn classify_repeated(f: &Fixture) -> Facts {
 pub(super) fn ctl_record_first_classify(f: &Fixture) -> Facts {
     after_chat(f, CLASSIFY, "none", PASSED)
 }
+// CELL-R-A (SB3E-R265): the byte rows x:366-368 and 394-396, typed into
+// production's reader while held, under the Stop-first barrier (sched.rs).
+pub(super) fn recheck_eof(f: &Fixture) -> Facts {
+    d_lane(f, RECHECK, ("EOF", Some("04")), STOPPED)
+}
+pub(super) fn recheck_partial_ctrl_d(f: &Fixture) -> Facts {
+    d_lane(f, RECHECK, ("partial_Ctrl_D", Some("partial+04")), STOPPED)
+}
+pub(super) fn recheck_master_close(f: &Fixture) -> Facts {
+    d_lane(f, RECHECK, ("master_close", Some("master_close")), STOPPED)
+}
+pub(super) fn classify_eof(f: &Fixture) -> Facts {
+    d_lane(f, CLASSIFY, ("EOF", Some("04")), STOPPED)
+}
+pub(super) fn classify_partial_ctrl_d(f: &Fixture) -> Facts {
+    d_lane(f, CLASSIFY, ("partial_Ctrl_D", Some("partial+04")), STOPPED)
+}
+pub(super) fn classify_master_close(f: &Fixture) -> Facts {
+    d_lane(f, CLASSIFY, ("master_close", Some("master_close")), STOPPED)
+}

@@ -148,8 +148,8 @@ const PORT_USES: &str = "\
 /// `#[path]` site of Mother's sources (G-S1).
 const PIN_DATA: &str = include_str!("route_seams_guard.pins");
 /// SB3E-R42.3 (G-S2): the pins file's sha256 and the sweep's exact count.
-const PINS_SHA256: &str = "489ce1699317a678c8ae25a45d8ad69198c465543d3fbf006df5200efe0c0093";
-const MUTANTS: usize = 3339;
+const PINS_SHA256: &str = "7e1e8a195eb55d137fbeb8a1e95666a9beeb44a53281231293df795f55bd8ab7";
+const MUTANTS: usize = 3744;
 const REGIONS: usize = 38;
 /// SB3E-R51.1: every file of the harness directory, byte for byte, exactly
 /// this list (`name sha256`): the authority for all of `route_cells`, `s5.rs`
@@ -158,27 +158,28 @@ const REGIONS: usize = 38;
 /// advisory layer.
 const CELLS: &str = "host/tests/route_cells/";
 const ROUTE_CELLS: &str = "\
-cells.rs 84847cce7ddc24e674bad5682bcb23914baa44725b773bc9d755e933911a0d8a
+cells.rs 1d88c33c5826d8ef98f3eae9640938b71fe31771c99c537288a414b7ee2a80fa
 grant.rs fbe4c4b9dc43dc86c77ed4ec9c09f8bf9ea61dc8091b8ed1866a847a99e27be4
 locks.rs 9b82f75d8ad4f2d0c47194c69be15187dd3f96291033b3a57a4105bc731ccf78
-main.rs 14fb806db7fad8481725bafd3bb9c871ba83f57cefaede4884472971129ff7b9
+main.rs a3a45aaf2ed1ba382f418a7b2ba4b6bbf15d2c50dbc67a42ab18c81447e4ff76
 reader.rs f0e072b6911653d806059786c6b9c822a908d0b6dbdad832c03ffbec4c7fe66b
 route_read.c 05fa04a9a933dacf5c4d4a93776e695da0c885dfebba857751f16cb7f14c6b4b
 route_fsync.c 6166fe8b9eee2e9c2a84a8bcbfcc1590f14de97d7bb0d60084da674a56f0e973
-s5.rs 19c8e6f1abf84e97ec1bee2b47453750aaeb35001ab63b5d47a4f7494ff542d7
+s5.rs f2ba2a7c61c07224825eec9b43c6ba965fe30671c62b32a56f22e531dff0d32e
 s5_close.rs 6127e5b54a2032998559214f4ef6efb8f7d9d765d6c55097367a386423434a0a
 s5_door.rs 323413cba0602e50146257de8146f162322a8678e97e80e932a06656864a8f5c
 s5_reg.rs 14561ee08b9feb518d8d61901f075c2f80b2dd7af465a09c6537ef055f4009a0
 s5_call_b.rs 2d7e695e5e214bf07d644db6c525b7216003e31e73d26ba6871fed0894f4e271
-s5_ident.rs d467c2f963694c2a603b0cce39c413bf8709c230b5ad426b3fb4f9ab27d2f966
+s5_ident.rs d03394ae144134d8d2a9b6b8d9838abad3ad971488144593e6b1f64db6db13c6
 s5_r6.rs 42217130763f956fa59dbc92830b833a9321ca1cbfd55b269fe3d82211f2efea
-s5_r7.rs ad041df26c8c0f54e46ebbddb42d333f623fc483ad7a51ad092ef292de50f70d
-s5_r8.rs 6b326d0a76740bcc526391fec977a6a49b7f93cf7c85967e45412346417b216d
-s5_r34.rs 4c1a25096ca10a0752b82ccce3205a8a878910c26fd15e885817e6628c46fcd7
-witness.rs 2ada1e372644a117517132b12f95d7e7b682245c98606c08e944638286ab536b
+s5_r7.rs 0b0f69e6f9af82669f58fb6027aeedc845a0a24dd44e483c828effb96fd942a4
+s5_r8.rs 0f713aef9892d23c2a324520dc29dd9a75fff2cb08c4cd24cf44d451e3a70e38
+s5_r34.rs c78eda7f31a14ebf1e2c7902c484123f0faa5ea1e8e03d0ef3d3a018a7f8ed20
+witness.rs 27cf374b94e66cbb0e07df971b67154a3054506491051d16e41d80effca3b6b1
 store.rs 0dabb6132cfc184a99b4627b983226cdef3390785c8e60daa189bba5bc737b00
 report.rs 29250bdce566726d69473bd8afffa8a04c79e04f8589ed9d41dbf94f845f744f
 s5_report.rs fed9e772fe9f00880077ca56f4a229742208bcdd904314cf5126fc91ba7166c9
+sched.rs e495380200fa3384f1761c54cf35b8635d4afc328ac6e520c01277f351f3dfbe
 ";
 fn route_cells() -> impl Iterator<Item = (&'static str, &'static str)> {
     ROUTE_CELLS.lines().filter_map(|l| l.split_once(' '))
@@ -196,15 +197,15 @@ s5_close.rs|U9a|close_obligations:lifecycle,delivery:lifecycle,mother_end:lifecy
 s5_door.rs|U20b|cancel_run:ingress,cancel_run:lifecycle|ctl_cancel_run|super::s5::d_cancel,super::s5::Facts,super::Fixture|-
 s5_reg.rs|U6a-1|registration_reserve:ingress,registration_record:ingress,registration_install:ingress,registration_readiness:ingress,registration_reserve:lifecycle,registration_record:lifecycle,registration_readiness:lifecycle,registration_install:lifecycle,registration_version:ingress,registration_status:ingress,registration_tags:ingress,registration_show:ingress|ctl_registration_reserve,ctl_registration_record,ctl_registration_install,ctl_registration_readiness,ctl_registration_version,ctl_registration_status,ctl_registration_tags,ctl_registration_show|super::s5::read_registered,super::s5::registered,super::s5::Facts,super::Fixture|-
 s5_call_b.rs|U19b-2|call_version:ingress,call_version:lifecycle,call_status:ingress,call_status:lifecycle,call_tags:ingress,call_tags:lifecycle|ctl_call_version,ctl_call_status,ctl_call_tags|super::s5::called,super::s5::read_called,super::s5::Facts,super::Fixture|-
-s5_ident.rs|U19c|identity_view:ingress,identity_view:lifecycle,inference_binding:ingress|ctl_identity_view,ctl_inference_binding|super::s5::identified,super::s5::Facts,super::Fixture|-
+s5_ident.rs|U19c|identity_view:ingress,identity_view:lifecycle,inference_binding:ingress|ctl_identity_view,ctl_inference_binding|super::s5::identified,super::s5::read_identified,super::s5::Facts,super::Fixture|-
 s5_r34.rs|U6b-2|attempt_ticket:ingress,attempt_ticket:lifecycle,call_slot_reserve:ingress,call_slot_reserve:lifecycle,charge_append:ingress,charge_append:lifecycle,meter_settle:ingress,meter_settle:lifecycle|ctl_attempt_ticket,ctl_call_slot_reserve,ctl_charge_append,ctl_meter_settle|super::s5::attempted,super::s5::Facts,super::Fixture|-
 s5_r6.rs|U9b|close_restrict:lifecycle,emergency_restrict:lifecycle|ctl_close_restrict,ctl_emergency_restrict|super::s5::closed,super::s5::Close,super::s5::Facts,super::s5::Mode,super::s5::Setup,super::Fixture|-
-s5_r7.rs|U20c|attempt_record:ingress,attempt_record:lifecycle,attempt_pin_release:ingress,attempt_pin_release:lifecycle,operation_complete:ingress,operation_complete:lifecycle|ctl_attempt_record,ctl_attempt_pin_release,ctl_operation_complete|super::s5::after_chat,super::s5::Facts,super::Fixture|-
+s5_r7.rs|U20c|attempt_record:ingress,attempt_record:lifecycle,attempt_pin_release:ingress,attempt_pin_release:lifecycle,operation_complete:ingress,operation_complete:lifecycle|ctl_attempt_record,ctl_attempt_pin_release,ctl_operation_complete|super::s5::after_chat,super::s5::d_lane,super::s5::Facts,super::Fixture|-
 s5_r8.rs|U20c|lane_result_admission:ingress,lane_result_admission:lifecycle,post_record_recheck:ingress,record_first_classify:ingress|ctl_lane_result_admission,ctl_post_record_recheck,ctl_record_first_classify|super::s5::after_chat,super::s5::d_lane,super::s5::Facts,super::Fixture|-
 s5_report.rs|U21a|close_report:lifecycle,close_report:fault,close_report:schedule|ctl_close_report|super::report::reached,super::report::Hold,super::report::Owner,super::s5::collect_report,super::s5::Facts,super::Fixture|-
 ";
 /// Item 1(a): the directory's files that are not sections, closed.
-const NON_SECTIONS: [&str; 10] = [
+const NON_SECTIONS: [&str; 11] = [
     "cells.rs",
     "grant.rs",
     "locks.rs",
@@ -213,6 +214,7 @@ const NON_SECTIONS: [&str; 10] = [
     "report.rs",
     "route_fsync.c",
     "route_read.c",
+    "sched.rs",
     "store.rs",
     "witness.rs",
 ];
@@ -276,7 +278,7 @@ const MANIFESTS: [(&str, &str); 2] = [
 /// SB3E-R44.2: `main.rs`'s top-level items (`items`), one per line (one
 /// `:` escaped, so the host-access scan does not match this file).
 const MAIN_ITEMS: &str = "\
-#![cfg(all(target_os=linux,mother_route_seams))]#![deny(unsafe_code)]#![recursion_limit=256]usenexus_governed_control::authority::approval::*;\n\
+#![cfg(all(target_os=linux,mother_route_seams))]#![deny(unsafe_code)]#![recursion_limit=512]usenexus_governed_control::authority::approval::*;\n\
 usenexus_governed_control::authority::clock::SystemClock;\n\
 usenexus_governed_control::authority::ids::RunId;\n\
 usenexus_governed_control::broker::route_seams::{arm,drain_trace,Action,Entry,Held};\n\
@@ -308,6 +310,7 @@ mods5_r7;\n\
 mods5_r8;\n\
 mods5_reg;\n\
 mods5_report;\n\
+modsched;\n\
 modstore;\n\
 macro_rules!cell\n\
 macro_rules!ctl\n\
@@ -357,10 +360,11 @@ host/tests/route_cells/report.rs|implDropforTty\n\
 host/tests/route_cells/store.rs|impl<T>Faulted<T>\n\
 ";
 /// SB3E-R42.4 (G-S3): `s5.rs`'s one import from its parent, by name.
-const S5_SUPER: [&str; 10] = [
+const S5_SUPER: [&str; 11] = [
     "child",
     "fake_ollama",
     "reader",
+    "sched",
     "spec",
     "Fixture",
     "Opened",
@@ -3132,7 +3136,7 @@ s|fn sessions
 s|const HELD
 s|const REFUSED
 s|struct Facts{session,request,recorded,claim,points,acks,value,row,applied,broker,mother,host,journal,native,peer,findings,read}
-h|struct Read{value,trace,echo,since}
+h|struct Read{value,trace,echo,since,sched}
 s|enum Ack
 s|enum Hold
 h|const BROKER_SINKS

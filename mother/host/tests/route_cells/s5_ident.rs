@@ -8,7 +8,7 @@
 // M-5b: the nine identity stop-class rows (S2) and the six bind byte rows,
 // whose ledger varies with the two cancellers (F5).
 use super::{
-    s5::{identified, Facts},
+    s5::{identified, read_identified, Facts},
     Fixture,
 };
 const IDV: (&str, &str) = ("identity_view", "ingress");
@@ -39,4 +39,24 @@ pub(super) fn bind_quit(f: &Fixture) -> Facts {
 }
 pub(super) fn ctl_inference_binding(f: &Fixture) -> Facts {
     identified(f, BIND, "none", PASSED)
+}
+// CELL-R-A (SB3E-R265): the bind byte rows x:299-304, typed into the reader
+// while held, under the Stop-first barrier (sched.rs).
+pub(super) fn bind_cr(f: &Fixture) -> Facts {
+    read_identified(f, BIND, ("CR", "stop0d"), STOPPED)
+}
+pub(super) fn bind_lf(f: &Fixture) -> Facts {
+    read_identified(f, BIND, ("LF", "stop0a"), STOPPED)
+}
+pub(super) fn bind_crlf(f: &Fixture) -> Facts {
+    read_identified(f, BIND, ("CRLF", "stop0d0a"), STOPPED)
+}
+pub(super) fn bind_eof(f: &Fixture) -> Facts {
+    read_identified(f, BIND, ("EOF", "04"), STOPPED)
+}
+pub(super) fn bind_partial_ctrl_d(f: &Fixture) -> Facts {
+    read_identified(f, BIND, ("partial_Ctrl_D", "partial+04"), STOPPED)
+}
+pub(super) fn bind_master_close(f: &Fixture) -> Facts {
+    read_identified(f, BIND, ("master_close", "master_close"), STOPPED)
 }
