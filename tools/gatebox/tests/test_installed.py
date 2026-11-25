@@ -195,7 +195,47 @@ class Q8F1Oracles(unittest.TestCase):
             closed.assert_called_once_with(987)
         with patch.object(probe.os,'open',side_effect=OSError(errno.EIO,'broken')):
             with self.assertRaises(ValueError): probe.host_pty_denied('/dev/pts/99')
-        self.assertIn("host_pty_denied(context['pty']['path'])",(HERE/'probe.py').read_text())
+        self.assertIn("host_ptys_denied([slave for _,slave in pairs],context['pty']['path'])",(HERE/'probe.py').read_text())
+
+class Gb4bPtsCanary(unittest.TestCase):
+    """GB4b prototype (F-GB-PTS4, SB3E-R108.3, R252): real PTYs, opened here and only here. `own` are the probe's two;
+    `host` stands for a host PTY this process can open (it owns it). The devpts listing is given, never read."""
+    def setUp(self):
+        import pty
+        self.probe = load('probe')
+        self.own, self.host = [pty.openpty(),pty.openpty()], pty.openpty()
+        for pair in self.own+[self.host]:
+            for fd in pair: self.addCleanup(os.close,fd)
+        self.slaves = [slave for _,slave in self.own]
+        self.names = [os.path.basename(os.ttyname(fd)) for fd in self.slaves]
+        self.reachable = os.ttyname(self.host[1])
+        self.free = '/dev/pts/999999'  # no such PTY: a free number
+    def test_base_check_fails_when_the_frozen_path_is_the_payloads_own_pty(self):
+        with self.assertRaisesRegex(ValueError,'host PTY accessible'): self.probe.host_pty_denied(os.ttyname(self.slaves[1]))  # R108.3, R252
+    def test_passes_when_the_frozen_path_is_the_payloads_own_pty(self):
+        self.assertEqual(self.probe.host_ptys_denied(self.slaves,os.ttyname(self.slaves[1]),self.names),0)
+    def test_passes_with_the_frozen_number_free_and_no_holders(self):
+        self.assertEqual(self.probe.host_ptys_denied(self.slaves,self.free,self.names),1)  # the frozen path itself: ENOENT
+    def test_fails_when_a_host_pty_is_reachable(self):
+        listed = self.names+[os.path.basename(self.reachable)]
+        with self.assertRaisesRegex(ValueError,'host PTY accessible'): self.probe.host_ptys_denied(self.slaves,self.free,listed)
+        with self.assertRaisesRegex(ValueError,'host PTY accessible'): self.probe.host_ptys_denied(self.slaves,self.reachable,self.names)
+    def test_own_is_by_inode_identity_never_by_name(self):
+        # A reachable PTY listed under every name still fails unless its inode is one of the probe's own descriptors'.
+        with self.assertRaisesRegex(ValueError,'host PTY accessible'):
+            self.probe.host_ptys_denied([self.slaves[0]],self.free,self.names)  # the second own PTY, not handed in: not own
+    def test_denied_host_ptys_pass_and_other_errors_fail(self):
+        import errno
+        real = self.probe.os.open
+        for error in (errno.EACCES,errno.EPERM,errno.ENOENT):
+            with patch.object(self.probe.os,'open',side_effect=OSError(error,'denied')):
+                self.assertEqual(self.probe.host_ptys_denied(self.slaves,self.free,self.names+[os.path.basename(self.reachable)]),2)
+        with patch.object(self.probe.os,'open',side_effect=OSError(errno.EIO,'broken')):
+            with self.assertRaisesRegex(ValueError,'host PTY probe error'): self.probe.host_ptys_denied(self.slaves,self.reachable,self.names)
+    def test_default_listing_is_the_visible_devpts(self):
+        with patch.object(self.probe.os,'listdir',return_value=self.names+['ptmx']) as listed:
+            self.assertEqual(self.probe.host_ptys_denied(self.slaves,self.free),1)
+        listed.assert_called_once_with('/dev/pts')
 
 class Q8F2Oracles(unittest.TestCase):
     def test_api_mount_skeleton_inventory(self):

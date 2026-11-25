@@ -35,9 +35,16 @@ def route_request(**change):
     return dict(dict(repo_id='mother',full_sha=SHA,gate_set_id='route-cells',inventory_sha256=INVENTORY,
                      route_pins_sha256=PINS),**change)
 
+SHIM = b'\x7fELF route_read.so as init built it'  # GB4b: the witness file's bytes, as published
+def route_v2():
+    """The GB3 route policy shape (schema_version 2): no witness, gates [route_a1, a7, route-cells]."""
+    policy = copy.deepcopy(ROUTE); policy['schema_version'] = 2; del policy['witness']; del policy['environment']['ROUTE_WITNESS_DIR']
+    policy['gates'] = [g for g in policy['gates'] if g['id'] != 'route_shim']
+    return policy
+
 def route_v1():
     """The GB1/GB2 route policy shape (schema_version 1): no pins, gates [a7, route-cells], A7 without --pins."""
-    policy = copy.deepcopy(ROUTE); policy['schema_version'] = 1; del policy['pins']
+    policy = route_v2(); policy['schema_version'] = 1; del policy['pins']
     policy['gates'] = policy['gates'][1:]; policy['gates'][0]['argv'] = policy['gates'][0]['argv'][:-2]
     return policy
 
@@ -45,27 +52,29 @@ def route_success():
     """A complete PASS_ROUTE_CELLS summary and its artifacts, as GB1b's supervisor publishes them."""
     env = ROUTE['environment']
     files = {'a7-'+rel.replace('/','-')+'.log':rel.encode() for rel in ROUTE['a7']['evidence']}
-    files.update({'a7-verdict.json.log':b'{"verdict": "pass"}\n','c1.log':A1_PASS,'c2.log':b'a7\n','c4.log':b'cells\n'})
+    files.update({'a7-verdict.json.log':b'{"verdict": "pass"}\n','c1.log':A1_PASS,'c2.log':b'a7\n','c3.log':b'','c5.log':b'cells\n',
+                  'witness-route_read.so.log':SHIM})
     logs = [dict(file=n,sha256=sha(d)) for n,d in files.items()]
     def done(i, gate, argv, cwd, log):
         return dict(id='c%d'%i,gate_id=gate,argv=argv,cwd=cwd,environment=dict(env),exit_code=0,signal=None,
                     timed_out=False,oom=False,status_complete=True,collector_complete=True,log=log,log_sha256=sha(files[log]))
     a1 = done(1,'route_a1',ROUTE['gates'][0]['argv'],'/work/src','c1.log')
     a7 = done(2,'a7',ROUTE['gates'][1]['argv'],'/work/src','c2.log')
-    cells = done(4,'route-cells',[EXE],'/work/src/mother/host','c4.log')
+    shim = done(3,'route_shim',ROUTE['gates'][2]['argv'],'/work/src','c3.log')
+    cells = done(5,'route-cells',[EXE],'/work/src/mother/host','c5.log')
     cells.update(artifact_id='route_cells',inventory=dict(expected=list(NAMES),executed=list(NAMES),passed=list(NAMES),
                                                           failed=[],ignored=[],filtered=[]))
-    listing = dict(id='c3',gate_id='route-cells-list',argv=[EXE,'--list','--format','terse'],cwd='/work/src/mother/host',
+    listing = dict(id='c4',gate_id='route-cells-list',argv=[EXE,'--list','--format','terse'],cwd='/work/src/mother/host',
                    environment=dict(env),exit_code=0,signal=None)
     summary = {k:{'observed':True} for k in receipt.GROUPS}
     summary.update(schema_version=1,run_id='b'*32,peer_uid=os.getuid(),attempts=['b'*32],status='PASS_ROUTE_CELLS',
-                   request=route_request(),commands=[a1,a7,cells],logs=logs,missing_evidence=[],limitations=[receipt.MUTABLE],
+                   request=route_request(),commands=[a1,a7,shim,cells],logs=logs,missing_evidence=[],limitations=[receipt.MUTABLE],
                    environment=dict(env),cleanup={'complete':True})
     summary['snapshot'] = dict(commit=SHA,content_sha256='2'*64,lockfile_sha256='3'*64)
     summary['installed'] = dict(bundle_sha256='4'*64,policy_sha256='5'*64,gates_sha256=receipt.current_policy(),stage='normal')
     rust = ROUTE['toolchain']['manifest_sha256']
     summary['input_observations'] = {'before':{'rust':rust,'registry':'6'*64},'after':{'rust':rust,'registry':'6'*64}}
-    ids = ['route_a1','a7','route-cells']
+    ids = ['route_a1','a7','route_shim','route-cells']
     summary['coverage'] = dict(expected=ids,executed=list(ids),passed=list(ids),
                                failed=[],ignored=[],filtered=[],excluded=[],discovery=[listing],
                                artifacts=[dict(id='route_cells',adapter='libtest',executable=EXE,
@@ -74,12 +83,22 @@ def route_success():
                            evidence={n:sha(d) for n,d in files.items() if n.startswith('a7-') and n != 'a7-verdict.json.log'},
                            lockfile_sha256='3'*64,wrapper_sha256=WRAPPER,harness_sha256='7'*64,inventory_sha256=INVENTORY,
                            names=list(NAMES),trust=ROUTE['trust'],route_a1='PASS',route_a1_sha256=sha(A1_PASS),
-                           route_pins_sha256=PINS)
+                           route_pins_sha256=PINS,shims={'route_read.so':sha(SHIM)})
+    return summary, files
+
+def route_success_v2():
+    """A GB3 PASS_ROUTE_CELLS summary (no witness, no shim gate), valid under route_v2()."""
+    summary, files = route_success()
+    del summary['lane']['shims']; del files['c3.log']; del files['witness-route_read.so.log']
+    summary['commands'] = [c for c in summary['commands'] if c['gate_id'] != 'route_shim']
+    summary['logs'] = [l for l in summary['logs'] if l['file'] in files]
+    for holder in [summary,*summary['commands'],*summary['coverage']['discovery']]: del holder['environment']['ROUTE_WITNESS_DIR']
+    for key in ('expected','executed','passed'): summary['coverage'][key] = ['route_a1','a7','route-cells']
     return summary, files
 
 def route_success_v1():
     """A GB1/GB2 PASS_ROUTE_CELLS summary (no pins, no route A1), valid under route_v1()."""
-    summary, files = route_success()
+    summary, files = route_success_v2()
     for key in ('route_a1','route_a1_sha256','route_pins_sha256'): del summary['lane'][key]
     del summary['request']['route_pins_sha256']; del files['c1.log']
     summary['commands'] = summary['commands'][1:]; summary['logs'] = [l for l in summary['logs'] if l['file'] != 'c1.log']
@@ -128,7 +147,7 @@ class RouteReceiptControls(unittest.TestCase):
     def test_gate_set_table(self):
         self.assertEqual({k:(v['policy'],v['status'],v['extra']) for k,v in receipt.GATE_SETS.items()},
                          {'full':('gates.json','PASS_SCOPED',()),'route-cells':('route-cells.json','PASS_ROUTE_CELLS',('lane',))})
-        self.assertEqual(receipt.GATE_SETS['route-cells']['cwd'],{'route_a1':'/work/src','a7':'/work/src','route-cells':'/work/src/mother/host'})
+        self.assertEqual(receipt.GATE_SETS['route-cells']['cwd'],{'route_a1':'/work/src','a7':'/work/src','route_shim':'/work/src','route-cells':'/work/src/mother/host'})
     def test_route_request_with_full_status_refused(self):
         self.summary['status'] = 'PASS_SCOPED'; self.refuse('status/gate set')
     def test_full_request_with_route_status_refused(self):
@@ -191,6 +210,10 @@ class RouteReceiptControls(unittest.TestCase):
         for phrase in ('cannot authenticate earlier writes','reviewed harness behaviour','replace its own pathname',
                        'commitment, not execution attestation','No unpinned candidate code runs before'):
             self.assertIn(phrase,ROUTE['trust'])
+    def test_gb4b_trust_statement_names_f6_and_f7(self):
+        for phrase in ('a change and restore of it within the run is not seen','(F6)','remains reviewed harness behaviour',
+                       'depends on the host C compiler and libraries (F7)','independent rebuild on the same host'):
+            self.assertIn(phrase,ROUTE['trust'])
     def test_artifact_inside_route_target(self):
         for bad in ('/work/target/release/deps/route_cells-0123456789abcdef',EXE+'/../x',EXE+'x'):
             summary, _ = route_success(); summary['coverage']['artifacts'][0]['executable'] = bad
@@ -233,7 +256,7 @@ class RouteSchemaControls(unittest.TestCase):
             with self.subTest(key=key):
                 summary = route_success()[0]; del summary['lane'][key]; self.refuse('route lane keys',summary)
     def test_unknown_route_policy_version_refused(self):
-        for version in (3,'2',None,True,0):
+        for version in (4,'3',None,True,0):
             with self.subTest(version=version):
                 route = copy.deepcopy(ROUTE); route['schema_version'] = version
                 if version is None: del route['schema_version']
@@ -258,6 +281,40 @@ class RouteSchemaControls(unittest.TestCase):
         summary = route_success()[0]
         summary.update(status='FAILED',missing_evidence=['ValueError: PINS: x'],lane=dict(route_a1='PINS_REFUSED',route_pins_sha256=PINS))
         receipt.validate_summary(summary)
+    # GB4b prototype (SB3E-R19 B1, R32.1): route policy version 3, the init-built shim witness.
+    def gb3(self):
+        summary, files = route_success_v2(); summary['installed']['gates_sha256'] = self.retained(route_v2()); return summary
+    def test_gb4b_v2_receipt_still_validates_under_its_retained_policy(self):
+        receipt.validate_summary(self.gb3())
+    def test_gb4b_v2_receipt_cannot_carry_a_shim_digest(self):
+        summary = self.gb3(); summary['lane']['shims'] = {'route_read.so':sha(SHIM)}; self.refuse('route lane keys',summary)
+    def test_gb4b_v3_receipt_without_the_witness_is_refused(self):
+        summary = route_success()[0]; del summary['lane']['shims']; self.refuse('route lane keys',summary)
+        for shims in ({},None,[],{'route_read.so':None},{'route_read.so':''},{'route_fsync.so':sha(SHIM)},
+                      {'route_read.so':sha(SHIM),'route_fsync.so':sha(SHIM)}):
+            with self.subTest(shims=shims):
+                summary = route_success()[0]; summary['lane']['shims'] = shims; self.refuse('route shim witness',summary)
+    def test_gb4b_wrong_digest_is_refused(self):
+        summary = route_success()[0]; summary['lane']['shims'] = {'route_read.so':sha(b'another library')}
+        self.refuse('route shim witness',summary)
+    def test_gb4b_witness_log_must_be_published(self):
+        summary = route_success()[0]
+        summary['logs'] = [l for l in summary['logs'] if l['file'] != 'witness-route_read.so.log']
+        self.refuse('route shim witness',summary)
+    def test_gb4b_shim_gate_argv_is_policy(self):
+        summary = route_success()[0]
+        shim = next(c for c in summary['commands'] if c['gate_id'] == 'route_shim'); shim['argv'] = shim['argv'][:-1]
+        self.refuse('route invocation',summary)
+        summary = route_success()[0]; summary['commands'] = [c for c in summary['commands'] if c['gate_id'] != 'route_shim']
+        self.refuse('route invocation',summary)
+    def test_gb4b_published_witness_is_sealed(self):
+        summary, files = route_success()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); (root/'pending').mkdir(mode=0o700); (root/'receipts').mkdir(mode=0o755)
+            path = receipt.publish(root/'pending',root/'receipts','b'*32,summary,files)
+            self.assertEqual(receipt.verify_integrity(path,os.getuid())['summary']['lane']['shims'],{'route_read.so':sha(SHIM)})
+            target = path/'witness-route_read.so.log'; target.chmod(0o644); target.write_bytes(b'candidate-written'); target.chmod(0o444)
+            with self.assertRaisesRegex(ValueError,'artifact hash/size mismatch'): receipt.verify_integrity(path,os.getuid())
 
 class HistoricalPolicyControls(unittest.TestCase):
     """SB3E-R19.5: a receipt is validated against its own recorded policy, never the current one."""
@@ -530,6 +587,9 @@ class InstallControls(unittest.TestCase):
             self.assertTrue({'route/route_a1.py','route/route_a1_controls.py'} <= set(files))
             readme = (HERE/'README.md').read_text()  # GB3 Codex 2: the README PIN predicate counts this partition
             self.assertIn(f"len(values['FILES'])!={len(files)} or len(excluded)!={len(excluded)} ",readme)
+    def test_gb4b_upgrade_bootstrap_is_its_own_directory(self):
+        self.assertEqual(str(installer()['UPGRADE_BOOT']),'/root/gatebox-gb4b')  # the reviewed GB1-GB3 bundles stay in place
+        self.assertIn('sudo /bin/bash /root/gatebox-gb4b/tools/gatebox/install.sh upgrade',(HERE/'README.md').read_text())
     def bundle(self, root, wrapper):
         scope = installer(); archive = root/'bundle.tar'
         harness = scope['HARNESS']; source = core.HERE.parents[1]/harness if not INSTALLED else HERE/'policy/phase2_live_sandbox.rs'
@@ -1103,9 +1163,28 @@ open(cfg['verdict'], 'w').write(json.dumps({'verdict': 'fail' if cfg['mode'] == 
 if cfg['mode'] == 'stray': detach(cfg['pidfile'])
 sys.exit(1 if cfg['mode'] == 'fail' else 0)
 '''
+FAKE_CC = DETACH + r'''
+import os, sys
+mode, out, pidfile = sys.argv[1], sys.argv[2], sys.argv[3]
+if mode != 'none': open(out + '/route_read.so', 'wb').write(b'\x7fELF the shim init built')
+if mode == 'extra': open(out + '/route_fsync.so', 'wb').write(b'x')
+if mode == 'symlink': os.rename(out + '/route_read.so', out + '/../real.so'); os.symlink('../real.so', out + '/route_read.so')
+if mode == 'stray': detach(pidfile)
+sys.exit(1 if mode == 'fail' else 0)
+'''
 FAKE_HARNESS = DETACH + r'''
 import os, sys
 MODE, PIDFILE = %r, %r
+WITNESS = os.environ.get('ROUTE_WITNESS_DIR', '') + '/route_read.so'
+def candidate_writes(restore=False):  # GB4b: a harness that writes the witness itself
+    kept = open(WITNESS, 'rb').read(); os.unlink(WITNESS); open(WITNESS, 'wb').write(b'a library the candidate wrote')
+    if restore: os.unlink(WITNESS); open(WITNESS, 'wb').write(kept)
+if MODE == 'witness-list' and '--list' in sys.argv: candidate_writes()
+if MODE == 'witness-run' and '--list' not in sys.argv: candidate_writes()
+if MODE == 'witness-restore' and '--list' not in sys.argv: candidate_writes(restore=True)
+if MODE == 'witness-extra' and '--list' not in sys.argv: open(os.path.dirname(WITNESS) + '/extra.so', 'wb').write(b'x')
+if MODE == 'witness-gone' and '--list' not in sys.argv: os.unlink(WITNESS)
+if MODE == 'witness-seen' and '--list' not in sys.argv: open(sys.argv[0] + '.seen', 'wb').write(open(WITNESS, 'rb').read())
 if sys.argv[1:] == ['--list', '--format', 'terse']:
     print('cells::rc_r1_alpha_beta_one: test'); print('cells::rc_r2_alpha_beta_two: test')
     if MODE == 'replace':  # R20 (i): a constructor that replaces its own pathname during --list
@@ -1148,11 +1227,12 @@ print(json.dumps(out))
 class RoutePayloadControls(unittest.TestCase):
     """init.Runner.route: quiescence, sealing, harness identity (R20) and the inventory commitment."""
     def scenario(self, a7='pass', harness='normal', inventory=INVENTORY, pre_stray=False, a1='pass', pins='same',
-                 a1_argv=None, a7_argv=None, deadline=None, setup=None):
+                 a1_argv=None, a7_argv=None, deadline=None, setup=None, shim='pass', shim_argv=None):
         tmp = Path(tempfile.mkdtemp(dir=os.environ.get('TMPDIR')))
         self.addCleanup(lambda: subprocess.run(['rm','-rf',str(tmp)]))
         (tmp/'src/mother/host').mkdir(parents=True); (tmp/'run').mkdir(); (tmp/'home').mkdir()
-        (tmp/'a7.py').write_text(FAKE_A7); (tmp/'a1.py').write_text(FAKE_A1)
+        (tmp/'a7.py').write_text(FAKE_A7); (tmp/'a1.py').write_text(FAKE_A1); (tmp/'cc.py').write_text(FAKE_CC)
+        witness = dict(ROUTE['witness'],dir=str(tmp/'run/witness'))
         (tmp/'src/tools').mkdir(); pinned = tmp/'src/tools/route_pins.json'; pinned.write_bytes(b'{"pins": 1}\n')
         digest = sha(pinned.read_bytes())
         if setup: setup(tmp)
@@ -1164,13 +1244,15 @@ class RoutePayloadControls(unittest.TestCase):
         (tmp/'harness').write_text('#!/usr/bin/python3 -I\n'+FAKE_HARNESS % (harness,str(tmp/'harness.pid')))
         a7cfg = dict(ROUTE['a7'],target=str(tmp/'target-route'),evidence_dir=str(tmp/'run/a7'),verdict=str(tmp/'run/a7-verdict.json'))
         (tmp/'a7.json').write_text(json.dumps(dict(a7cfg,mode=a7,harness=str(tmp/'harness'),pidfile=str(tmp/'a7.pid'))))
-        env = dict(ROUTE['environment'],HOME=str(tmp/'home'),TMPDIR=str(tmp))
+        env = dict(ROUTE['environment'],HOME=str(tmp/'home'),TMPDIR=str(tmp),ROUTE_WITNESS_DIR=witness['dir'])
         gates = [dict(id='route_a1',argv=a1_argv or [sys.executable,'-I','-B',str(tmp/'a1.py'),a1,str(tmp/'a1.pid')]),
                  dict(id='a7',argv=a7_argv or [sys.executable,'-I','-B',str(tmp/'a7.py'),str(tmp/'a7.json')]),
-                 dict(ROUTE['gates'][2],executable=re.escape(a7cfg['target'])+'/release/deps/route_cells-[0-9a-f]{16}')]
-        policy = dict(ROUTE,a7=a7cfg,environment=env,gates=gates,pins=dict(ROUTE['pins'],path=str(pinned)))
+                 dict(id='route_shim',argv=shim_argv(tmp) if shim_argv else [sys.executable,'-I','-B',str(tmp/'cc.py'),shim,witness['dir'],
+                                                                             str(tmp/'cc.pid')]),
+                 dict(ROUTE['gates'][3],executable=re.escape(a7cfg['target'])+'/release/deps/route_cells-[0-9a-f]{16}')]
+        policy = dict(ROUTE,a7=a7cfg,environment=env,gates=gates,pins=dict(ROUTE['pins'],path=str(pinned)),witness=witness)
         cfg = dict(policy=policy,request=route_request(inventory_sha256=inventory,route_pins_sha256=digest),log=str(tmp/'log'),
-                   cwd={'route_a1':str(tmp/'src'),'a7':str(tmp/'src'),'route-cells':str(tmp/'src/mother/host')},
+                   cwd={'route_a1':str(tmp/'src'),'a7':str(tmp/'src'),'route_shim':str(tmp/'src'),'route-cells':str(tmp/'src/mother/host')},
                    pre_stray=str(tmp/'pre.pid') if pre_stray else None,status=str(tmp/'status'),deadline=deadline)
         proc = subprocess.run([sys.executable,'-I','-B','-c',DRIVER,str(HERE),json.dumps(cfg)],capture_output=True,text=True,timeout=120)
         self.assertEqual(proc.returncode,0,proc.stderr)
@@ -1178,7 +1260,7 @@ class RoutePayloadControls(unittest.TestCase):
         out['outputs'] = outputs(tmp/'log')
         out.update(frames=frames(tmp/'log'),records=[('status',r) for r in records(tmp/'status')]+
                    [('log',r) for r in records(tmp/'log')],request=cfg['request'],tmp=tmp)
-        for name in ('a1.pid','a7.pid','harness.pid','pre.pid'):
+        for name in ('a1.pid','a7.pid','harness.pid','pre.pid','cc.pid'):
             if (tmp/name).exists():
                 with self.assertRaises(ProcessLookupError,msg='stray survived quiescence'): os.kill(int((tmp/name).read_text()),0)
         self.assertEqual(out['left'],[])
@@ -1186,14 +1268,15 @@ class RoutePayloadControls(unittest.TestCase):
     def test_scripted_route_passes_and_seals_exact_evidence(self):
         out = self.scenario()
         self.assertIsNone(out['error'])
-        self.assertEqual(out['quiescence'],{'before-route-a1':True,'after-route-a1':True,'after-a7':True,'after-list':True})
+        self.assertEqual(out['quiescence'],{'before-route-a1':True,'after-route-a1':True,'after-a7':True,'after-route-shim':True,
+                                            'after-list':True})
         sealed = {'a7-'+rel.replace('/','-') for rel in ROUTE['a7']['evidence']}|{'a7-verdict.json'}
         self.assertLessEqual(sealed,set(out['outputs']))  # empty evidence (the start markers) is still a sealed log
         self.assertEqual((out['outputs']['a7-ship-start'],out['outputs']['a7-lane-start']),(b'',b''))
         lane = json.loads(out['outputs']['route-lane'])
         self.assertEqual((lane['names'],lane['harness_sha256']),(NAMES,json.loads(out['outputs']['a7-lane-inventory.json'])['files']
                                                                ['release/deps/route_cells-0123456789abcdef']))
-        self.assertEqual(json.loads(out['outputs']['c4-inventory'])['inventory']['passed'],NAMES)
+        self.assertEqual(json.loads(out['outputs']['c5-inventory'])['inventory']['passed'],NAMES)
         self.assertEqual((out['outputs']['c1'],json.loads(out['outputs']['route-pins'])['accepted']),(A1_PASS,True))
     def test_stray_that_detaches_and_closes_pipes_fails_quiescence(self):
         out = self.scenario(a7='stray')
@@ -1208,11 +1291,11 @@ class RoutePayloadControls(unittest.TestCase):
         out = self.scenario(harness='replace')
         self.assertEqual(out['error'],'HARNESS: bytes differ from A7 lane inventory')
         self.assertTrue(out['quiescence'].get('after-list'))  # killed at the re-hash, not by quiescence
-        self.assertNotIn('c4',out['outputs'])
+        self.assertNotIn('c5',out['outputs'])
     def test_r20_process_surviving_list_fails_quiescence(self):
         out = self.scenario(harness='spawn')
         self.assertRegex(out['error'],'^QUIESCENCE: after-list: process survived and was killed')
-        self.assertNotIn('c4',out['outputs'])
+        self.assertNotIn('c5',out['outputs'])
     def test_symlinked_evidence_refused(self):
         self.assertRegex(self.scenario(a7='symlink')['error'],'^ROUTE_EVIDENCE: missing/linked .*/run/a7/lane/start$')
     def test_non_regular_evidence_refused(self):
@@ -1226,7 +1309,7 @@ class RoutePayloadControls(unittest.TestCase):
     def test_listed_names_must_match_submitted_inventory(self):
         out = self.scenario(inventory=sha(b'cells::rc_r1_alpha_beta_one'))
         self.assertEqual(out['error'],'INVENTORY: listed names differ from the submitted inventory_sha256')
-        self.assertNotIn('c4',out['outputs'])
+        self.assertNotIn('c5',out['outputs'])
     def test_a7_fail_is_reported_as_itself(self):
         out = self.scenario(a7='fail')
         self.assertEqual(out['error'],'A7: run verdict is not pass')
@@ -1255,7 +1338,7 @@ class RoutePayloadControls(unittest.TestCase):
         self.assertNotIn('c2',out['outputs'])
     def test_gb3_every_command_log_is_terminated_after_its_bytes(self):
         out = self.scenario()
-        for name in ('route-pins','c1','c2','c3','c4'):
+        for name in ('route-pins','c1','c2','c3','c4','c5'):
             with self.subTest(log=name):
                 mine = [data for n,data in out['frames'] if n == name]
                 self.assertEqual((mine[-1],mine[:-1].count(b'')),(b'',0))  # exactly one empty packet, the last
@@ -1363,7 +1446,8 @@ class RouteEarlyFailureControls(unittest.TestCase):
         self.assertEqual([m for m in summary['missing_evidence'] if m.startswith('route A1: ')],[line] if line else [])
         executed, passed, failed = coverage
         self.assertEqual({k:summary['coverage'][k] for k in ('expected','executed','passed','failed')},
-                         dict(expected=['route_a1','a7','route-cells'],executed=executed or [],passed=passed or [],failed=failed or []))
+                         dict(expected=['route_a1','a7','route_shim','route-cells'],executed=executed or [],passed=passed or [],
+                              failed=failed or []))
         return summary, path
     def tampered(self, path):
         target = path/'c1.log'; data = target.read_bytes(); target.chmod(0o644)
@@ -1497,17 +1581,149 @@ class SupervisorRouteSummary(unittest.TestCase):
     def test_route_summary_from_init_outputs_validates(self):
         supervisor, (expected, files) = load('supervisor'), route_success()
         start = lambda c: {k:c[k] for k in ('id','gate_id','argv','cwd','environment','exit_code','signal')}
-        commands = [start(expected['commands'][0]),start(expected['commands'][1]),expected['coverage']['discovery'][0],
-                    start(expected['commands'][2])]
+        commands = [start(expected['commands'][0]),start(expected['commands'][1]),start(expected['commands'][2]),
+                    expected['coverage']['discovery'][0],start(expected['commands'][3])]
         logs = dict(files)
         logs['route-pins.log'] = json.dumps(dict(accepted=True,sha256=PINS)).encode()
-        logs['c4-inventory.log'] = json.dumps(dict(artifact=expected['coverage']['artifacts'][0],
-                                                   inventory=expected['commands'][2]['inventory'])).encode()
+        logs['c5-inventory.log'] = json.dumps(dict(artifact=expected['coverage']['artifacts'][0],
+                                                   inventory=expected['commands'][3]['inventory'])).encode()
         logs['route-lane.log'] = json.dumps(dict(harness_sha256='7'*64,names=NAMES,rustc_vv='rustc 1.94.0',cargo_v='cargo 1.94.0')).encode()
         logs['coverage.log'] = json.dumps(dict(artifacts=expected['coverage']['artifacts'],failures=[])).encode()
         summary = {k:copy.deepcopy(v) for k,v in expected.items() if k not in ('commands','coverage','lane','environment')}
-        evidence = Mock(commands=commands,active=None,terminated={'route-pins','c1','c2','c3','c4'})
+        evidence = Mock(commands=commands,active=None,terminated={'route-pins','c1','c2','c3','c4','c5'})
         supervisor.route_summary(summary,evidence,logs,summary['installed'])
         for key in ('commands','coverage','lane','environment'): self.assertEqual(summary[key],expected[key],key)
         summary['logs'] = [dict(file=n,sha256=sha(d)) for n,d in logs.items()]
         receipt.validate_summary(summary)
+
+
+class Gb4bWitnessPayload(unittest.TestCase):
+    """GB4b prototype (Step 0): init.Runner.shims / witness. The witness directory is init's: made by init, built by
+    the policy argv, sealed before the first harness process, and the same bytes after the listing and the run."""
+    scenario = RoutePayloadControls.scenario
+    BUILT = b'\x7fELF the shim init built'
+    def test_positive_witness_is_sealed_before_the_harness_and_unchanged_after(self):
+        out = self.scenario(harness='witness-seen')
+        self.assertIsNone(out['error'])
+        self.assertEqual(out['outputs']['witness-route_read.so'],self.BUILT)
+        seen = out['tmp']/'target-route/release/deps/route_cells-0123456789abcdef.seen'
+        self.assertEqual(seen.read_bytes(),self.BUILT)  # what the harness could preload is what was sealed
+        order = [n for n,_ in out['frames']]
+        self.assertLess(order.index('witness-route_read.so'),order.index('c4'))  # sealed before `--list`, the first harness process
+        self.assertLess(max(i for i,n in enumerate(order) if n == 'c3'),order.index('witness-route_read.so'))
+    def test_negative_directory_written_before_init_is_refused(self):
+        def setup(tmp): (tmp/'run/witness').mkdir(); (tmp/'run/witness/route_read.so').write_bytes(b'a candidate-written witness')
+        out = self.scenario(setup=setup)
+        self.assertRegex(out['error'],'^WITNESS: the witness directory was not made by init')
+        self.assertNotIn('witness-route_read.so',out['outputs']); self.assertNotIn('c3',out['outputs'])
+    def test_negative_missing_extra_linked_or_failed_build(self):
+        for shim, error in (('none','^WITNESS: built: unexpected witness set'),('extra','^WITNESS: built: unexpected witness set'),
+                            ('symlink','^WITNESS: built: ROUTE_EVIDENCE: missing/linked'),('fail','^WITNESS: the shim build exited nonzero'),
+                            ('stray','^QUIESCENCE: after-route-shim: process survived and was killed')):
+            with self.subTest(shim=shim):
+                out = self.scenario(shim=shim)
+                self.assertRegex(out['error'],error)
+                self.assertNotIn('witness-route_read.so',out['outputs']); self.assertNotIn('c4',out['outputs'])  # no harness process
+    def test_negative_candidate_written_witness_is_refused(self):
+        for harness, error, ran in (('witness-list','^WITNESS: after-list: bytes differ from the sealed witness$',False),
+                                    ('witness-run','^WITNESS: after-run: bytes differ from the sealed witness$',True),
+                                    ('witness-extra','^WITNESS: after-run: unexpected witness set',True),
+                                    ('witness-gone','^WITNESS: after-run: unexpected witness set',True)):
+            with self.subTest(harness=harness):
+                out = self.scenario(harness=harness)
+                self.assertRegex(out['error'],error)
+                self.assertEqual('c5' in out['outputs'],ran)
+                self.assertNotIn('c5-inventory',out['outputs'])  # no reconciled result leaves init
+                self.assertEqual(out['outputs']['witness-route_read.so'],self.BUILT)  # the sealed bytes stay init's
+    def test_limitation_change_and_restore_during_the_run_is_not_seen(self):
+        # Stated limit (as the trust statement's "cannot authenticate earlier writes"): init and the harness share a uid.
+        self.assertIsNone(self.scenario(harness='witness-restore')['error'])
+    def test_real_cc_builds_the_repo_shim_and_rebuilds_to_the_same_digest(self):
+        if INSTALLED or not shutil.which('cc'): self.skipTest('the repository source and a host cc are needed')
+        source = HERE.parents[1]/'mother/host/tests/route_cells/route_read.c'
+        argv = lambda out: [a.replace('/run/gate/witness',str(out)).replace('/work/src',str(HERE.parents[1])) for a in ROUTE['gates'][2]['argv']]
+        out = self.scenario(shim_argv=lambda tmp: argv(tmp/'run/witness'))
+        self.assertIsNone(out['error'])
+        built = out['outputs']['witness-route_read.so']
+        self.assertEqual(built[:4],b'\x7fELF')
+        other = Path(tempfile.mkdtemp(dir=os.environ.get('TMPDIR'))); self.addCleanup(shutil.rmtree,other)
+        subprocess.run(argv(other),check=True,env=dict(ROUTE['environment']))  # an independent rebuild, another directory
+        self.assertEqual(sha((other/'route_read.so').read_bytes()),sha(built))
+        self.assertIn(str(source),argv(other))
+
+class Gb4bWitnessReceipt(unittest.TestCase):
+    """GB4b prototype: the supervisor's lane digest is of the published bytes; a failed witness publishes its stage."""
+    publish, real, scenario = RouteEarlyFailureControls.publish, RouteEarlyFailureControls.real, RoutePayloadControls.scenario
+    def test_lane_digest_is_the_published_witness_bytes(self):
+        supervisor, (expected, files) = load('supervisor'), route_success()
+        summary, logs = {'request':expected['request'],'snapshot':expected['snapshot']}, dict(files)
+        logs.update({'route-pins.log':json.dumps(dict(accepted=True,sha256=PINS)).encode(),
+                     'c5-inventory.log':json.dumps(dict(artifact=expected['coverage']['artifacts'][0],inventory=expected['commands'][3]['inventory'])).encode(),
+                     'route-lane.log':json.dumps(dict(harness_sha256='7'*64,names=NAMES,rustc_vv='r',cargo_v='c',shims={'route_read.so':'f'*64})).encode(),
+                     'coverage.log':json.dumps(dict(artifacts=expected['coverage']['artifacts'],failures=[])).encode()})
+        evidence = Mock(commands=[],active=None,terminated={'route-pins'})
+        supervisor.route_summary(summary,evidence,logs,expected['installed'])
+        self.assertEqual(summary['lane']['shims'],{'route_read.so':sha(SHIM)})  # never the value a payload record names
+        del logs['witness-route_read.so.log']
+        with self.assertRaises(KeyError): supervisor.route_summary(summary,evidence,logs,expected['installed'])  # execute: FAILED
+    def test_failed_witness_publishes_its_stage_and_no_digest(self):
+        for change, stage in ((dict(harness='witness-run'),'init: ValueError: WITNESS: after-run: bytes differ'),
+                              (dict(shim='none'),'init: ValueError: WITNESS: built: unexpected witness set')):
+            with self.subTest(change=change):
+                summary, path = self.real(**change)
+                self.assertEqual(summary['status'],'FAILED')
+                self.assertTrue(any(m.startswith(stage) for m in summary['missing_evidence']),summary['missing_evidence'])
+                self.assertNotIn('shims',summary['lane'])
+                self.assertIn('route_shim',summary['coverage']['executed'])
+
+class Gb4bProbeRecord(unittest.TestCase):
+    """GB4b prototype (SB3E-R108.2): a probe exception is one bounded, terminated record naming its stage."""
+    publish = RouteEarlyFailureControls.publish
+    def forced(self, error):
+        init, probe = load('init'), load('probe')
+        tmp = Path(tempfile.mkdtemp(dir=os.environ.get('TMPDIR'))); self.addCleanup(shutil.rmtree,tmp)
+        log = os.open(tmp/'log',os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600); self.addCleanup(os.close,log)
+        runner = init.Runner(log,log)
+        def processes(context): raise error
+        with patch.object(probe,'Path',Mock()), patch.object(probe.json,'loads',return_value={'pty':{'path':'/dev/pts/4'}}), \
+                patch.object(probe,'capture',return_value=''), patch.object(probe,'isolation',return_value={'ok':True}), \
+                patch.object(probe,'processes',processes), patch.object(probe,'network',Mock(side_effect=AssertionError('later stage ran'))):
+            with self.assertRaises(ValueError) as raised: init.probe_run(runner,(log,),run=probe.payload)
+        return str(raised.exception), frames(tmp/'log')
+    def test_forced_probe_exception_names_its_stage_in_one_terminated_record(self):
+        error, sent = self.forced(ValueError('host PTY accessible'))
+        self.assertEqual(error,'PROBE A6: ValueError: host PTY accessible')
+        self.assertEqual(sent,[('probe-failure',b'ValueError: PROBE A6: ValueError: host PTY accessible'),('probe-failure',b'')])
+    def test_record_is_bounded(self):
+        _, sent = self.forced(OSError('x'*100000))
+        self.assertEqual(len(b''.join(d for _,d in sent)),2000)
+        self.assertTrue(sent[0][1].startswith(b'ValueError: PROBE A6: OSError: xxx')); self.assertEqual(sent[-1],('probe-failure',b''))
+    def test_init_main_sends_the_record_and_still_fails(self):
+        init = load('init'); sent = []
+        open_fd = os.open
+        with patch.object(init.os,'getpid',return_value=1), patch.object(init.os,'getuid',return_value=1234), \
+                patch.object(init.ctypes,'CDLL',return_value=Mock(prctl=Mock(return_value=0))), \
+                patch.object(init.os,'dup',side_effect=lambda fd:open_fd('/dev/null',os.O_RDWR)), \
+                patch.object(init.os,'dup2'), patch.object(init.signal,'signal'), patch.object(init,'Path'), \
+                patch.object(init.shutil,'copytree'), patch.object(init.os,'walk',return_value=[]), \
+                patch.object(init,'observations',return_value={'fixture':True}), patch.object(init,'resources',return_value={}), \
+                patch.object(init,'probe_payload',side_effect=ValueError('PROBE A5: TimeoutError: renderer readiness')), \
+                patch.object(init,'requested',return_value={'gate_set_id':'full'}), \
+                patch.object(init,'packet',lambda fd,value: sent.append(value)), \
+                patch.object(init.Runner,'gates',Mock(side_effect=AssertionError('a gate ran after a failed probe'))):
+            with self.assertRaisesRegex(ValueError,'^PROBE A5: TimeoutError: renderer readiness$'): init.main()
+        named = [v for v in sent if v.get('id') == 'probe-failure']
+        self.assertEqual([__import__('base64').b64decode(v['data']) for v in named],[b'ValueError: PROBE A5: TimeoutError: renderer readiness',b''])
+        self.assertFalse(any(v.get('id') == 'isolation' or v.get('event') == 'complete' for v in sent))
+    FULL = dict(repo_id='mother',full_sha=SHA,gate_set_id='full')
+    RECORD = b'ValueError: PROBE A6: ValueError: host PTY accessible'
+    def test_receipt_names_the_stage(self):
+        script = [log('resources',b'{}'),log('probe-failure',self.RECORD),log('probe-failure')]
+        summary, path = self.publish(script,request=self.FULL)  # the real lifecycle check raises: no `complete`, no command
+        self.assertEqual(summary['status'],'FAILED')
+        self.assertEqual(summary['missing_evidence'],['ValueError: missing/failed private lifecycle evidence','init: '+self.RECORD.decode()])
+        self.assertEqual((path/'probe-failure.log').read_bytes(),self.RECORD)
+    def test_base_signature_without_the_record_and_an_unterminated_record_is_not_quoted(self):
+        for script in ([log('resources',b'{}')],[log('resources',b'{}'),log('probe-failure',self.RECORD)]):
+            summary, _ = self.publish(script,request=self.FULL)
+            self.assertEqual(summary['missing_evidence'],['ValueError: missing/failed private lifecycle evidence'])  # R108.1, R252
