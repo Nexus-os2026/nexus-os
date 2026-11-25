@@ -676,8 +676,7 @@ fn gc_sources() -> Vec<(String, String)> {
     crate::adapter::scan::route_guard_sources(&root).0
 }
 fn data(file: &str) -> String {
-    let path = crate::adapter::scan::crate_root().join(file);
-    std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
+    crate::adapter::scan::route_guard_data(file)
 }
 /// Sources and data are read at run time, so a built guard sees a planted file.
 struct Tree {
