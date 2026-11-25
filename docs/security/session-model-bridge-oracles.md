@@ -2305,9 +2305,9 @@ production text, inside the named `fn`; a missing, repeated or moved anchor expi
 | Fact | Form | Where |
 |---|---|---|
 | F1 page `run` is refused | the refusal branch before the dispatch; `let model = page_args.is_some();`; `page_preview` names no runtime, producer or door | hands.rs `run`, `page_preview` |
-| F2 cap 0 on every shipped lane | the trait default `{ 0 }`; the host builds `ScriptedLane`s wrapped in `ObservedLane`; neither impl defines a cap; `fn max_model_calls` exists only in lane.rs and page_builder/lane.rs | hands.rs `run`, lane.rs |
+| F2 cap 0 on every shipped lane | the trait default `{ 0 }`; the host builds `ScriptedLane`s wrapped in `ObservedLane`; neither impl defines a cap; the `fn max_model_calls` definitions are pinned as counted rows (`CAP_DEFINITIONS`, R283 S2: one in lane.rs, one in page_builder/lane.rs), so a second definition in a listed file is a finding too | hands.rs `run`, lane.rs |
 | F3 no identity without a positive cap | both sites (R260.1 F1): `run_lanes` (`(cap > 0).then(..model_identity())`) and `submit` (`.any(..max_model_calls() > 0) && ..model_identity()`); the caller is reserved and admitted only under `cap > 0` | coordinator.rs |
-| D1 site list | every production occurrence, not after `fn`, of `model_identity`, `admit_inference`, `max_model_calls`, `PageBuilderLane`, `page_preview` (`OWED_SITES`) | Mother's tree |
+| D1 site list | every production occurrence, not after `fn`, of `model_call` (R283 S4), `model_identity`, `admit_inference`, `max_model_calls`, `PageBuilderLane`, `page_preview` (`OWED_SITES`) | Mother's tree |
 
 **The W1 guard (`w1_findings`; R196.1, R214.3 D1, R260.1 F6).** One guard per event, over
 Mother's tree and crates/nexus-governed-control (`gc:` rows). It pins, as a multiset, every
@@ -2315,9 +2315,12 @@ production occurrence of the primitive's name not preceded by `fn`: `stop` (miss
 `stop_all`, and `revoke_grant`, `revoke`, `route_revoke_original_grant` (grant_revocation). So a
 call, a method value, a `use .. as` alias, a raw identifier and a UFCS path are all rows. A new
 row reopens that event's keys. The one production revoker is `close_session_authority`'s loop
-(governed.rs); `revoke_grant`'s only caller is the S3 seam. Limit: the guard sees the primitive's
-own name, not a call through an already pinned wrapper of another name. A `#[path]` test module
-counts as production (R214.3 D2), which is fail safe.
+(governed.rs), itself pinned by name with its one caller, the close path (R283 S3);
+`revoke_grant`'s only caller is the S3 seam. Limit: the guard sees a pinned name, not a call
+through an already pinned wrapper of another name. A `#[path]` test module counts as production
+(R214.3 D2), which is fail safe. The walks are closed (R283 S1): a symlink or an unreadable entry
+of the governed-control walk, and any governed-control or Mother file that does not tokenize, is
+a finding of the guard it would have fed, never a silent drop.
 
 **The report.** The check prints, by key, the owed keys (the race B keys x:103-105 among them),
 W2 (hold and amend words; the nine denial rows as `denial: oracle missing`, R260.4) and W3. The
@@ -2339,7 +2342,18 @@ forwards the cap breaks F2 by text, so the owed state dies at 1a unless 1a first
 resolves the owed keys, or rewrites F2 under review. On a tree that dispatches pages F1 is gone
 and every owed key expires; this unit proves that by plant only.
 
-**Plants (`mbin`, 18).** `u22_p_*` in route_plants.json: the refusal dispatched; a lane with cap 1
+**Ledger (R283; completeness, no code here).**
+
+- C1: the branch `owed refused: .. is outside the owed set` has one control (a race A key); after G5 no `race_a` row exists and that control is skipped. Owed: a control on a fixture with one credit withdrawn.
+- C2: after G5 the red/green fixture test has no `uncredited` row, so it only asserts zero findings; the 55 are proven by the run on 3ec9759a, not by an assertion.
+- C3: the W2 and W3 report is printed, not asserted. G5 evidence capture: `cargo test --offline --locked -p nexus-mother --lib sb3e_u22_every_set_b_key_is_credited_resolved_or_owed -- --exact oracles::route_seams_guard::activation::sb3e_u22_every_set_b_key_is_credited_resolved_or_owed --show-output`, stored with the G5 evidence.
+- C4: `adapter::scan::route_guard_data` follows symlinks and takes any relative path; its three callers pass constants. Owed: refuse an absolute or `..` path.
+- C5 (inherited, R214.3 D2): `test_mods` would also exclude a `#[cfg(not(test))] mod x;` twin of a `#[cfg(test)] mod x;`; the helper now also carries the W1 and owed D1 lists.
+- C6: `reviewed` accepts `tr1_hold` on any sink carrying the TR-1 status; the table is the trusted input (41 rows on the six close sinks). Owed: limit to the six sinks.
+- C7: the host `impl Lane for` scan matches the plain form only; harmless since S2 (a positive cap needs a counted definition).
+
+**Plants (`mbin`, 22).** R283 adds four: a symlinked governed-control file, a second cap
+definition in lane.rs, a new caller of `close_session_authority`, and a new `model_call` caller. `u22_p_*` in route_plants.json: the refusal dispatched; a lane with cap 1
 (three forms); each identity site and the caller uncapped; an anchor gone; a new identity caller;
 four W1 caller forms and one governed-control caller; an owed row outside the set, on a reachable
 sink, duplicated, and dropped.
