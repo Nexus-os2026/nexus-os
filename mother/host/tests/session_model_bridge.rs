@@ -681,7 +681,7 @@ fn parse_ledger(ledger: &str, identity: &str) -> Option<Vec<Delta>> {
 fn check_witness(row: &[String], at: &str) -> Result<Witness, String> {
     let bad = |what: String| format!("{at}: bad witness: {what}");
     let keys =
-        "entry check value out branch peer ledger window next store deadline_fired grant locks";
+        "entry check value out branch peer ledger sched window next store deadline_fired grant locks";
     let mut seen = BTreeMap::new();
     for part in row[13].split(';') {
         let (key, value) = part.split_once('=').unwrap_or((part, ""));
@@ -807,6 +807,17 @@ fn check_witness(row: &[String], at: &str) -> Result<Witness, String> {
     }
     let ledger = parse_ledger(seen["ledger"], &identity)
         .ok_or_else(|| bad(format!("ledger {}", seen["ledger"])))?;
+    // CELL-R-A (SB3E-R265): `sched` is closed: `stop_first` only, on a byte
+    // typed through the reader, whose ledger is the bound Stop's own records
+    // (its emergency_stop and the mission's end) and no `run_cancelled`.
+    if let Some(sched) = seen.get("sched") {
+        let stop = ["+1:emergency_stop[", "+1:MissionEnd["];
+        let stopped = stop.iter().all(|e| seen["ledger"].contains(e));
+        let cancelled = seen["ledger"].contains("run_cancelled");
+        if *sched != "stop_first" || !apply.starts_with("reader:") || !stopped || cancelled {
+            return Err(bad(format!("sched {sched}")));
+        }
+    }
     if !matches!(seen["window"], "boundary" | "completed_attempt") {
         return Err(bad(format!("window {}", seen["window"])));
     }
@@ -1085,6 +1096,12 @@ fn check_expect_table(c: &Context) -> Result<(), String> {
                     "{}/{}/{value}: status is not {want}",
                     row[1], row[2]
                 ));
+            }
+            // CELL-R-A (SB3E-R265): a schedule is named only on a credited cell.
+            let entry = format!("{}/{}/{}/{value}", row[0].to_lowercase(), row[1], row[2]);
+            let scheduled = row[13].split(';').any(|p| p.starts_with("sched="));
+            if scheduled && !c.expect.manifest.contains(&entry) {
+                return Err(format!("{entry}: sched on a row no cell credits"));
             }
         }
         let witness = check_expect_row(row, &words(values.1))?;
@@ -2590,6 +2607,17 @@ seal/lifecycle/Normal|17||denial:sb3e_unresolved_lane_refuses_seal|status is not
 call_chat/fault/decline|17||hold:no_recipe|status is not
 call_chat/ingress/door_fence|17||hold:Bad-Slug|bad status
 ";
+/// CELL-R-A: `cell|field|ledger|wanted` (`~` the Stop's own ledger): an unknown
+/// schedule, a duplicate, one off the reader, without the Stop's records,
+/// beside the door's record, and one on a row no cell credits.
+const SCHED_EDITS: &str = "\
+call_chat/ingress/CR|;sched=door_first|~|bad witness: sched
+call_chat/ingress/CR|;sched=stop_first;sched=stop_first|~|bad witness field
+call_chat/ingress/quit|;sched=stop_first|~|bad witness: sched
+call_chat/ingress/CR|;sched=stop_first|+0:all[s=S]|bad witness: sched
+call_chat/ingress/CR|;sched=stop_first|~,+1:run_cancelled[s=S]|bad witness: sched
+call_chat/ingress/budget|;sched=stop_first|~|sched on a row no cell credits
+";
 /// `manifest|wanted`, `~` a newline: refused through the verifier, for that reason.
 const BAD_MANIFESTS: &str = "\
 // cells! { r5 call_chat lifecycle Normal; }~|no cells! block
@@ -2974,6 +3002,22 @@ fn sb3e_expect_verifier_controls_are_rejected() {
         run(&tsv, &held, listed, &sha256_hex(&held)),
         "has no open row",
     );
+    // CELL-R-A (SB3E-R265): `sched` is `stop_first`, once, on a credited byte
+    // row whose ledger is the Stop's own records (`cell|field|ledger|wanted`).
+    let sched = |cell: &str, field: &str, ledger: &str| {
+        fixture_edit(&base, cell, |c: &mut Vec<String>| {
+            let ledger = format!("ledger={ledger}{field};window=");
+            c[13] = c[13].replace("ledger=+0:all[s=S];window=", &ledger);
+        })
+    };
+    const STOPPED: &str = "+1:emergency_stop[s=S],+1:MissionEnd[s=S]";
+    let first = sched("call_chat/ingress/CR", ";sched=stop_first", STOPPED);
+    accepts("a forced Stop-first row", &first);
+    for spec in SCHED_EDITS.lines() {
+        let f: Vec<_> = spec.split('|').collect();
+        let ledger = f[2].replace('~', STOPPED);
+        check(spec, table(&sched(f[0], f[1], &ledger)), f[3]);
+    }
     let completed = |peer: &'static str| {
         fixture_edit(
             &base,
