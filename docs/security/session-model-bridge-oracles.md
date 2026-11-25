@@ -2192,7 +2192,7 @@ finding fails the cells (plant `rf10_p_fail_dropped`, state `Emergency`). The ch
 
 | Row | Field | Frozen | Now | Read from |
 |---|---|---|---|---|
-| x:177, 411, 423, 447 | ledger | `+0:all[s=S]` | `+1:emergency_stop[s=S]` | The reader's read-error arm presses the Stop route before it fails the session (terminal.rs `read_input`, :1433-1440; press :1435, `stop.rs` `press` :88-91). Production binds that route to the session (hands.rs:1157), and its worker records the stop (`stop.rs`:137 → host_session/stop.rs `record_stop` :162 → `EvidencePhase::EmergencyStop`, authority/mod.rs:1077; `emergency_stop`, authority/evidence.rs:72). One native record, as F-S0-1 on the byte rows of the same sinks (14.17, 14.20, 14.22). The R202 S1 whole-window clause applies: the count renders only when it is all of journal + native. |
+| x:177, 411, 423, 447 | ledger | `+0:all[s=S]` | `+1:emergency_stop[s=S]` | The reader's read-error arm presses the Stop route before it fails the session (terminal.rs `read_input`, :1434-1440; press :1435, `stop.rs` `press` :88-91). Production binds that route to the session (hands.rs:1157), and its worker records the stop (`stop.rs`:137 → host_session/stop.rs `record_stop` :162 → `EvidencePhase::EmergencyStop`, authority/mod.rs:1077; `emergency_stop`, authority/evidence.rs:72). One native record, as F-S0-1 on the byte rows of the same sinks (14.17, 14.20, 14.22). The R202 S1 whole-window clause applies: the count renders only when it is all of journal + native. |
 | x:322 | window | `boundary` | `completed_attempt` | witness.rs `window` (:1227-1238) reads the whole trace; the Builder's attempt has completed before its own prelock is held. The rule is unchanged; as x:316-321 (14.25, finding A). |
 
 Measured on the frozen table first: the four ledgers rendered `+1:all[s=S]` and x:322 rendered
@@ -2211,13 +2211,19 @@ family: the witnessed shim, never armed, leaves `ctl_registration_record`, `ctl_
 `ctl_lane_result_admission` byte-equal to their rows. Rule test
 `route_read_env_takes_the_witness_and_never_builds`.
 
-**Installed proof (R267.4): not proven locally.** The ten rows count only when GB4b-A is merged,
-installed and qualified, and a host-authenticated `PASS_ROUTE_CELLS` receipt on the merged SHA
-shows: `lane.shims = {"route_read.so": D}` with the published `witness-route_read.so.log`; D
-equal to the review record's own rebuild (`--route-shim-sha256`); the ten
-`cells::rc_*_ingress_read_failure` names in the inventory and passed; no `NO-SHIM-WITNESS` refusal; init's three
-witness checks passed; and every `ROUTE SHIM SHA256` line of the ten cells equal to D. U22 is
-checked against these rows only after that.
+**Installed proof (R267.4 as amended by R275.2): not proven locally.** The ten rows count only
+when GB4b-A is installed and qualified, the gb4b checker credits all ten, and a host-authenticated
+`PASS_ROUTE_CELLS` receipt on the merged SHA shows: (1) the v3 lane with
+`lane.shims = {"route_read.so": D}` and the published `witness-route_read.so.log`; (2) D equal to
+the review record's own rebuild (`--route-shim-sha256`); (3) the ten
+`cells::rc_*_ingress_read_failure` names in the inventory and passed; (4) no `NO-SHIM-WITNESS`
+refusal; (5) init's three witness checks passed. The receipt does not show that a child mapped
+the init-built file: Gate Box runs the harness without `--nocapture`, so a passing cell's
+`ROUTE SHIM SHA256` line never reaches the lane log, and a harness build has the same digest.
+That claim rests on reviewed harness behaviour: `store::shim_witness`, the F3 credit rule
+(`witness::refusals`) and its plants (`rf10_p_child_witness_skipped`,
+`rf10_p_credit_without_witness`), and the carrier rule test. U22 is checked against these rows
+only after that.
 
 **Ledger (not this unit).** F6: on x:322, 435, 459, 471, 483, 495 the frozen ledger names another
 event, so the Stop record in the window is not counted by it; the press is bound by `ack=read`.
