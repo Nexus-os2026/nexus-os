@@ -49,6 +49,13 @@ The frozen values and the replay contract are QM3-H1's half (`docs/security/qm3-
 3. **read_chat** (SB3E-R172 F1). Every call must pass production read_chat: only a page or a draft-level refusal proves that. Any other outcome (a transport refusal such as `model_truncated`, a timeout, kind `other`) is the miss `read_chat`, in every case. freplay's CONFIRMED also needs it at F.
 4. **Verdict.** Evaluate §8.1, then write the canonical record `evidence-<run_id>.json` and the ledger line. The record is content-free: hashes, counts, codes and booleans only, with no model text. The raw bundle stays in `/home/nexus/.m2d/qm3/<run_id>/` (mode 0700) and is bound by `raw_bundle_sha256`.
 
+## QM3-H3: the confirm-time harness (SB3E-R196.3)
+
+- **Run under umask 077** (O-2 and O-5). The harness now creates each case folder and its `steps/` with mode 0700 itself (SB3E-R191), so the replay no longer depends on the umask. The umask still keeps the ledger, the record and the reply files private.
+- **Swap cleared before O-2** (SB3E-R192). The Owner runs `sudo swapoff -a && sudo swapon -a`; the Architect checks that swap used is about 0 and MemAvailable is above the 36 GiB start floor before giving the go.
+- **The confirm form.** `confirm --binary B --artifact-sha HEX --record F --freplay F --golden-ci ID --root DIR --notes F --facts F`. The binary is started with the M-5a page flags: `--home H --workspace W --mission one-page-site --notes F --facts F`. `--notes` and `--facts` must be absolute, symlink-free regular files that group and others cannot write, each in a private 0700 folder of the operator. Anything else is refused before the binary starts (ledger code `page_fixture`).
+- **The confirm-time pin.** O-5 runs the QM3-H3 harness; its sha256 is recorded in the QM3-H3 hand-back, not in this file. The Phase M record stays bound to `5f4548e4…`, the harness it ran.
+
 ## Owner steps (§11)
 
 | # | Step | The Owner sees |
